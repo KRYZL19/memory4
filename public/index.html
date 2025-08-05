@@ -24,7 +24,7 @@
         <div id="players" class="text-lg text-center mt-4 text-gray-700"></div>
         <div id="score-board" class="score-board text-lg sm:text-xl font-semibold text-center mt-4 text-gray-800"></div>
         <div id="game-board" class="game-board grid grid-cols-4 gap-2 sm:gap-4 mt-6 justify-center"></div>
-        <div id="message" class="text-center mt-4 text-lg text-gray-700"></div>
+        <div id="message" class="text-center mt-4 text-lg font-semibold text-gray-700"></div>
         <div id="loading" class="hidden text-center mt-4">
             <svg class="animate-spin h-8 w-8 text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -114,7 +114,7 @@
             renderGameBoard(cards, currentTurn);
             updateScoreBoard(players);
             updateTurn(currentTurn);
-            console.log('Game update, currentTurn:', currentTurn, 'playerId:', playerId);
+            console.log('Game update, currentTurn:', currentTurn, 'playerId:', playerId, 'is my turn?', currentTurn === playerId);
         });
 
         socket.on('gameEnd', ({ winner, scores }) => {
@@ -127,9 +127,10 @@
         function renderGameBoard(cards, currentTurn) {
             const gameBoard = document.getElementById('game-board');
             gameBoard.innerHTML = '';
+            console.log('Rendering game board, currentTurn:', currentTurn, 'playerId:', playerId);
             cards.forEach(card => {
                 const cardElement = document.createElement('div');
-                cardElement.className = `card ${card.isFlipped ? 'flipped' : ''} ${card.isMatched ? 'matched bg-green-200' : 'bg-gray-300'} w-16 h-16 sm:w-28 sm:h-28 rounded-lg shadow-md transition-all duration-300 touch-none select-none ${currentTurn === playerId ? 'cursor-pointer' : 'cursor-not-allowed'}`;
+                cardElement.className = `card ${card.isFlipped ? 'flipped' : ''} ${card.isMatched ? 'matched bg-green-200' : 'bg-gray-300'} w-16 h-16 sm:w-28 sm:h-28 rounded-lg shadow-md transition-all duration-300 touch-none select-none ${currentTurn === playerId ? 'cursor-pointer hover:bg-gray-400' : 'cursor-not-allowed opacity-75'}`;
                 cardElement.dataset.id = card.id;
                 const img = document.createElement('img');
                 img.src = card.image;
@@ -156,6 +157,7 @@
 
         function updateScoreBoard(players) {
             document.getElementById('score-board').innerHTML = players.map(p => `<span class="${p.id === playerId ? 'text-blue-600' : 'text-gray-600'}">${p.name}: ${p.score} Punkte</span>`).join(' | ');
+            console.log('Scoreboard updated:', players);
         }
 
         function updateTurn(currentTurn) {
