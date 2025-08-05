@@ -25,6 +25,8 @@ function getRandomImages(count) {
 }
 
 io.on('connection', (socket) => {
+    console.log('New connection:', socket.id);
+
     socket.on('createRoom', (playerName) => {
         const roomId = Math.random().toString(36).substr(2, 9);
         rooms.set(roomId, {
@@ -35,6 +37,7 @@ io.on('connection', (socket) => {
         });
         socket.join(roomId);
         socket.emit('roomCreated', roomId);
+        console.log(`Room ${roomId} created by ${playerName} (${socket.id})`);
     });
 
     socket.on('joinRoom', ({ roomId, playerName }) => {
@@ -43,6 +46,7 @@ io.on('connection', (socket) => {
             room.players.push({ id: socket.id, name: playerName, score: 0 });
             socket.join(roomId);
             io.to(roomId).emit('playerJoined', room.players);
+            console.log(`Player ${playerName} (${socket.id}) joined room ${roomId}`);
 
             if (room.players.length === 2) {
                 // Spiel vorbereiten
@@ -57,15 +61,17 @@ io.on('connection', (socket) => {
                         isMatched: false
                     }));
                 room.gameStarted = true;
-                room.currentTurn = room.players[0].id;
+                room.currentTurn = room.players[0].id; // Spieler 1 beginnt
                 io.to(roomId).emit('gameStart', {
                     cards: room.cards,
                     currentTurn: room.currentTurn,
                     players: room.players
                 });
+                console.log(`Game started in room ${roomId}, currentTurn: ${room.currentTurn}`);
             }
         } else {
             socket.emit('joinError', 'Raum voll oder nicht gefunden');
+            console.log(`Join error for ${playerName} (${socket.id}) in room ${roomId}`);
         }
     });
 
@@ -76,12 +82,14 @@ io.on('connection', (socket) => {
             if (!card.isFlipped && !card.isMatched) {
                 card.isFlipped = true;
                 const flippedCards = room.cards.filter(c => c.isFlipped && !c.isMatched);
+                console.log(`Card ${cardId} flipped by ${socket.id} in room ${roomId}`);
 
                 if (flippedCards.length === 2) {
                     if (flippedCards[0].image === flippedCards[1].image) {
                         flippedCards.forEach(c => (c.isMatched = true));
                         const player = room.players.find(p => p.id === socket.id);
                         player.score += 1;
+                        console.log(`Match found by ${socket.id}, score: ${player.score}`);
                     } else {
                         setTimeout(() => {
                             flippedCards.forEach(c => (c.isFlipped = false));
@@ -91,10 +99,9 @@ io.on('connection', (socket) => {
                                 currentTurn: room.currentTurn,
                                 players: room.players
                             });
+                            console.log(`No match, turn changed to ${room.currentTurn}`);
                         }, 1000);
                     }
-                } else {
-                    room.currentTurn = socket.id;
                 }
 
                 io.to(roomId).emit('gameUpdate', {
@@ -111,8 +118,11 @@ io.on('connection', (socket) => {
                         scores: room.players
                     });
                     rooms.delete(roomId);
+                    console.log(`Game ended in room ${roomId}, winner: ${winner.name}`);
                 }
             }
+        } else {
+            console.log(`Invalid flip attempt by ${socket.id} in room ${roomId}, currentTurn: ${room.currentTurn}`);
         }
     });
 
@@ -122,8 +132,10 @@ io.on('connection', (socket) => {
             if (playerIndex !== -1) {
                 room.players.splice(playerIndex, 1);
                 io.to(roomId).emit('playerLeft', room.players);
+                console.log(`Player ${socket.id} left room ${roomId}`);
                 if (room.players.length === 0) {
                     rooms.delete(roomId);
+                    console.log(`Room ${roomId} deleted`);
                 }
             }
         }
