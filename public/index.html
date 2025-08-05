@@ -35,7 +35,13 @@
     </div>
 
     <script>
-        const socket = io({ path: '/socket.io' });
+        const socket = io({
+            path: '/socket.io',
+            transports: ['websocket', 'polling'], // Fallback auf Polling
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000
+        });
         let playerId;
 
         socket.on('connect', () => {
@@ -44,13 +50,23 @@
             document.getElementById('message').innerText = 'Verbunden! Bereit zum Spielen.';
             document.getElementById('debug-info').classList.remove('hidden');
             document.getElementById('debug-info').innerText = `Deine Spieler-ID: ${playerId}`;
-            console.log('Connected with playerId:', playerId);
+            console.log('Connected with playerId:', playerId, 'at', new Date().toLocaleString());
         });
 
-        socket.on('connect_error', () => {
-            document.getElementById('message').innerText = 'Verbindung fehlgeschlagen. Bitte versuche es erneut.';
+        socket.on('connect_error', (err) => {
+            document.getElementById('message').innerText = `Verbindung fehlgeschlagen: ${err.message}. Bitte versuche es erneut.`;
             document.getElementById('loading').classList.add('hidden');
-            console.error('Connection error');
+            console.error('Connection error:', err.message, 'at', new Date().toLocaleString());
+        });
+
+        socket.on('reconnect_attempt', (attempt) => {
+            document.getElementById('message').innerText = `Versuche erneut zu verbinden... (Versuch ${attempt}/10)`;
+            console.log('Reconnect attempt:', attempt);
+        });
+
+        socket.on('reconnect', () => {
+            document.getElementById('message').innerText = 'Wiederverbunden! Bereit zum Spielen.';
+            console.log('Reconnected with playerId:', playerId);
         });
 
         socket.on('flipError', (message) => {
