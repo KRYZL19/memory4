@@ -41,11 +41,13 @@
             playerId = socket.id;
             document.getElementById('loading').classList.add('hidden');
             document.getElementById('message').innerText = 'Verbunden! Bereit zum Spielen.';
+            console.log('Connected with playerId:', playerId);
         });
 
         socket.on('connect_error', () => {
             document.getElementById('message').innerText = 'Verbindung fehlgeschlagen. Bitte versuche es erneut.';
             document.getElementById('loading').classList.add('hidden');
+            console.error('Connection error');
         });
 
         function createRoom() {
@@ -76,11 +78,13 @@
             document.getElementById('room-id').innerText = `Raum-ID: ${roomId}`;
             document.getElementById('menu').classList.add('hidden');
             document.getElementById('loading').classList.add('hidden');
+            console.log('Room created:', roomId);
         });
 
         socket.on('playerJoined', (players) => {
             document.getElementById('players').innerText = `Spieler: ${players.map(p => p.name).join(', ')}`;
             document.getElementById('loading').classList.add('hidden');
+            console.log('Players in room:', players);
         });
 
         socket.on('playerLeft', (players) => {
@@ -88,56 +92,62 @@
             document.getElementById('message').innerText = 'Ein Spieler hat das Spiel verlassen.';
             document.getElementById('game-board').innerHTML = '';
             document.getElementById('menu').classList.remove('hidden');
+            console.log('Player left, remaining players:', players);
         });
 
         socket.on('joinError', (message) => {
             document.getElementById('message').innerText = message;
             document.getElementById('loading').classList.add('hidden');
+            console.error('Join error:', message);
         });
 
         socket.on('gameStart', ({ cards, currentTurn, players }) => {
             document.getElementById('message').innerText = '';
             document.getElementById('loading').classList.add('hidden');
-            renderGameBoard(cards);
+            renderGameBoard(cards, currentTurn);
             updateScoreBoard(players);
             updateTurn(currentTurn);
+            console.log('Game started, currentTurn:', currentTurn, 'playerId:', playerId);
         });
 
         socket.on('gameUpdate', ({ cards, currentTurn, players }) => {
-            renderGameBoard(cards);
+            renderGameBoard(cards, currentTurn);
             updateScoreBoard(players);
             updateTurn(currentTurn);
+            console.log('Game update, currentTurn:', currentTurn, 'playerId:', playerId);
         });
 
         socket.on('gameEnd', ({ winner, scores }) => {
             document.getElementById('message').innerText = `Spiel vorbei! Gewinner: ${winner}`;
             updateScoreBoard(scores);
             document.getElementById('menu').classList.remove('hidden');
+            console.log('Game ended, winner:', winner);
         });
 
-        function renderGameBoard(cards) {
+        function renderGameBoard(cards, currentTurn) {
             const gameBoard = document.getElementById('game-board');
             gameBoard.innerHTML = '';
             cards.forEach(card => {
                 const cardElement = document.createElement('div');
-                cardElement.className = `card ${card.isFlipped ? 'flipped' : ''} ${card.isMatched ? 'matched bg-green-200' : 'bg-gray-300'} w-16 h-16 sm:w-28 sm:h-28 rounded-lg shadow-md transition-all duration-300 touch-none select-none`;
+                cardElement.className = `card ${card.isFlipped ? 'flipped' : ''} ${card.isMatched ? 'matched bg-green-200' : 'bg-gray-300'} w-16 h-16 sm:w-28 sm:h-28 rounded-lg shadow-md transition-all duration-300 touch-none select-none ${currentTurn === playerId ? 'cursor-pointer' : 'cursor-not-allowed'}`;
                 cardElement.dataset.id = card.id;
                 const img = document.createElement('img');
                 img.src = card.image;
                 img.className = `w-full h-full object-cover rounded-lg ${card.isFlipped || card.isMatched ? 'block' : 'hidden'}`;
                 cardElement.appendChild(img);
-                if (!card.isMatched && !card.isFlipped) {
-                    // Unterstützung für Klick- und Touch-Events
+                if (!card.isMatched && !card.isFlipped && currentTurn === playerId) {
                     cardElement.addEventListener('click', () => {
                         socket.emit('flipCard', { roomId: document.getElementById('room-id').innerText.split(': ')[1], cardId: card.id });
                         cardElement.classList.add('scale-95');
                         setTimeout(() => cardElement.classList.remove('scale-95'), 200);
+                        console.log('Card clicked:', card.id, 'by player:', playerId);
                     });
                     cardElement.addEventListener('touchstart', (e) => {
-                        e.preventDefault(); // Verhindert Scrollen oder andere Standard-Touch-Aktionen
+                        e.preventDefault();
                         socket.emit('flipCard', { roomId: document.getElementById('room-id').innerText.split(': ')[1], cardId: card.id });
                         cardElement.classList.add('scale-95');
                         setTimeout(() => cardElement.classList.remove('scale-95'), 200);
+                        console.log('Card touched:', card.id, 'by player:', playerId);
                     });
                 }
                 gameBoard.appendChild(cardElement);
@@ -150,6 +160,7 @@
 
         function updateTurn(currentTurn) {
             document.getElementById('message').innerText = currentTurn === playerId ? 'Du bist dran!' : 'Warte auf den anderen Spieler...';
+            console.log('Current turn:', currentTurn, 'playerId:', playerId, 'is my turn?', currentTurn === playerId);
         }
     </script>
 </body>
