@@ -7,11 +7,10 @@
         "start": "node server.js"
     },
     "engines": {
-        "node": "18.x"
+        "node": "20.x"
     },
     "dependencies": {
-        "express": "^4.21.2",
-        "socket.io": "^4.5.0",
-        "sockethub": "^4.1.0"
+        "express": "^4.21.1",
+        "socket.io": "^4.8.0"
     }
 }
