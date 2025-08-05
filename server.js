@@ -3,10 +3,14 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
     cors: {
-        origin: [process.env.APP_URL || 'http://localhost:3000'],
+        origin: '*', // Für Debugging: Alle Ursprünge zulassen
         methods: ['GET', 'POST'],
         credentials: true
-    }
+    },
+    transports: ['websocket', 'polling'], // Fallback auf Polling, falls WebSocket fehlschlägt
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000
 });
 const path = require('path');
 
@@ -25,7 +29,7 @@ function getRandomImages(count) {
 }
 
 io.on('connection', (socket) => {
-    console.log('New connection:', socket.id);
+    console.log('New connection:', socket.id, 'from', socket.handshake.address);
 
     socket.on('createRoom', (playerName) => {
         const roomId = Math.random().toString(36).substr(2, 9);
@@ -93,7 +97,6 @@ io.on('connection', (socket) => {
                     } else {
                         setTimeout(() => {
                             flippedCards.forEach(c => (c.isFlipped = false));
-                            // Wechsel zum anderen Spieler
                             const nextPlayer = room.players.find(p => p.id !== socket.id);
                             room.currentTurn = nextPlayer ? nextPlayer.id : room.players[0].id;
                             io.to(roomId).emit('gameUpdate', {
@@ -112,17 +115,6 @@ io.on('connection', (socket) => {
                     players: room.players
                 });
                 console.log(`Game update sent to room ${roomId}, currentTurn: ${room.currentTurn}, players:`, room.players.map(p => `${p.name} (${p.id})`));
-
-                // Spielende prüfen
-                if (room.cards.every(c => c.isMatched)) {
-                    const winner = room.players.reduce((a, b) => a.score > b.score ? a : b);
-                    io.to(roomId).emit('gameEnd', {
-                        winner: winner.name,
-                        scores: room.players
-                    });
-                    rooms.delete(roomId);
-                    console.log(`Game ended in room ${roomId}, winner: ${winner.name}`);
-                }
             }
         } else {
             console.log(`Invalid flip attempt by ${socket.id} in room ${roomId}, currentTurn: ${room.currentTurn}, gameStarted: ${room?.gameStarted}`);
@@ -141,7 +133,6 @@ io.on('connection', (socket) => {
                     rooms.delete(roomId);
                     console.log(`Room ${roomId} deleted`);
                 } else {
-                    // Wenn ein Spieler trennt, das Spiel zurücksetzen
                     room.gameStarted = false;
                     room.cards = [];
                     room.currentTurn = null;
@@ -150,6 +141,10 @@ io.on('connection', (socket) => {
                 }
             }
         }
+    });
+
+    socket.on('error', (err) => {
+        console.error('Socket error:', err.message);
     });
 });
 
