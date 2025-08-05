@@ -46,7 +46,7 @@ io.on('connection', (socket) => {
             room.players.push({ id: socket.id, name: playerName, score: 0 });
             socket.join(roomId);
             io.to(roomId).emit('playerJoined', room.players);
-            console.log(`Player ${playerName} (${socket.id}) joined room ${roomId}`);
+            console.log(`Player ${playerName} (${socket.id}) joined room ${roomId}, players:`, room.players.map(p => `${p.name} (${p.id})`));
 
             if (room.players.length === 2) {
                 // Spiel vorbereiten
@@ -67,7 +67,7 @@ io.on('connection', (socket) => {
                     currentTurn: room.currentTurn,
                     players: room.players
                 });
-                console.log(`Game started in room ${roomId}, currentTurn: ${room.currentTurn}`);
+                console.log(`Game started in room ${roomId}, currentTurn: ${room.currentTurn}, players:`, room.players.map(p => `${p.name} (${p.id})`));
             }
         } else {
             socket.emit('joinError', 'Raum voll oder nicht gefunden');
@@ -82,7 +82,7 @@ io.on('connection', (socket) => {
             if (!card.isFlipped && !card.isMatched) {
                 card.isFlipped = true;
                 const flippedCards = room.cards.filter(c => c.isFlipped && !c.isMatched);
-                console.log(`Card ${cardId} flipped by ${socket.id} in room ${roomId}`);
+                console.log(`Card ${cardId} flipped by ${socket.id} in room ${roomId}, currentTurn: ${room.currentTurn}`);
 
                 if (flippedCards.length === 2) {
                     if (flippedCards[0].image === flippedCards[1].image) {
@@ -93,13 +93,15 @@ io.on('connection', (socket) => {
                     } else {
                         setTimeout(() => {
                             flippedCards.forEach(c => (c.isFlipped = false));
-                            room.currentTurn = room.players.find(p => p.id !== socket.id).id;
+                            // Wechsel zum anderen Spieler
+                            const nextPlayer = room.players.find(p => p.id !== socket.id);
+                            room.currentTurn = nextPlayer ? nextPlayer.id : room.players[0].id;
                             io.to(roomId).emit('gameUpdate', {
                                 cards: room.cards,
                                 currentTurn: room.currentTurn,
                                 players: room.players
                             });
-                            console.log(`No match, turn changed to ${room.currentTurn}`);
+                            console.log(`No match, turn changed to ${room.currentTurn} in room ${roomId}`);
                         }, 1000);
                     }
                 }
@@ -109,6 +111,7 @@ io.on('connection', (socket) => {
                     currentTurn: room.currentTurn,
                     players: room.players
                 });
+                console.log(`Game update sent to room ${roomId}, currentTurn: ${room.currentTurn}, players:`, room.players.map(p => `${p.name} (${p.id})`));
 
                 // Spielende prüfen
                 if (room.cards.every(c => c.isMatched)) {
@@ -122,7 +125,8 @@ io.on('connection', (socket) => {
                 }
             }
         } else {
-            console.log(`Invalid flip attempt by ${socket.id} in room ${roomId}, currentTurn: ${room.currentTurn}`);
+            console.log(`Invalid flip attempt by ${socket.id} in room ${roomId}, currentTurn: ${room.currentTurn}, gameStarted: ${room?.gameStarted}`);
+            socket.emit('flipError', 'Du bist nicht dran oder das Spiel ist nicht aktiv.');
         }
     });
 
@@ -132,10 +136,17 @@ io.on('connection', (socket) => {
             if (playerIndex !== -1) {
                 room.players.splice(playerIndex, 1);
                 io.to(roomId).emit('playerLeft', room.players);
-                console.log(`Player ${socket.id} left room ${roomId}`);
+                console.log(`Player ${socket.id} left room ${roomId}, remaining players:`, room.players.map(p => `${p.name} (${p.id})`));
                 if (room.players.length === 0) {
                     rooms.delete(roomId);
                     console.log(`Room ${roomId} deleted`);
+                } else {
+                    // Wenn ein Spieler trennt, das Spiel zurücksetzen
+                    room.gameStarted = false;
+                    room.cards = [];
+                    room.currentTurn = null;
+                    io.to(roomId).emit('gameReset', 'Ein Spieler hat das Spiel verlassen.');
+                    console.log(`Game reset in room ${roomId} due to player disconnect`);
                 }
             }
         }
