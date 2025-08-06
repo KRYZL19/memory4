@@ -6,8 +6,8 @@
     <title>Memory Spiel mit Chat</title>
     <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 800px; max-width: 95%; }
+        body { font-family: Arial, sans-serif; background: #f4f4f4; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: white; padding: 20px; border-radius: 8px; width: 800px; max-width: 95%; }
         #game-board { display: grid; grid-template-columns: repeat(4, 80px); gap: 10px; margin-top: 15px; }
         .card { width: 80px; height: 80px; background: #ccc; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; }
         #chat { border: 1px solid #ddd; height: 150px; overflow-y: auto; margin-top: 15px; padding: 5px; background: #fafafa; font-size: 14px; }
@@ -72,15 +72,13 @@
             document.getElementById('info').innerText = `Raum erstellt: ${roomId}`;
         });
 
-        socket.on('joinError', (msg) => {
-            document.getElementById('info').innerText = msg;
-        });
-
         socket.on('playerJoined', (players) => {
             document.getElementById('info').innerText = 'Spieler: ' + players.map(p => p.name).join(', ');
+            if (!currentRoomId) currentRoomId = document.getElementById('roomId').value.trim();
         });
 
-        socket.on('gameStart', ({ cards, currentTurn, players }) => {
+        socket.on('gameStart', ({ cards, currentTurn, players, roomId }) => {
+            currentRoomId = roomId; // vom Server
             renderBoard(cards, currentTurn);
             updateScore(players);
         });
@@ -95,9 +93,7 @@
             updateScore(scores);
         });
 
-        socket.on('flipError', (msg) => {
-            document.getElementById('info').innerText = msg;
-        });
+        socket.on('flipError', (msg) => document.getElementById('info').innerText = msg);
 
         socket.on('chatHistory', (messages) => {
             const chatBox = document.getElementById('chat');
