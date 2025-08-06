@@ -17,8 +17,8 @@ function getRandomImages(count) {
 io.on('connection', (socket) => {
     console.log(`🔌 Neue Verbindung: ${socket.id}`);
 
-    socket.on('createRoom', ({ roomId, playerName }) => {
-        if (!roomId || !playerName) return socket.emit('joinError', 'Raum-ID und Name erforderlich.');
+    socket.on('createRoom', ({ roomId, playerName, turnTime }) => {
+        if (!roomId || !playerName || !turnTime) return socket.emit('joinError', 'Alle Felder erforderlich.');
         if (rooms.has(roomId)) return socket.emit('joinError', 'Diese Raum-ID ist bereits vergeben.');
 
         rooms.set(roomId, {
@@ -29,12 +29,13 @@ io.on('connection', (socket) => {
             locked: false,
             chat: [],
             timer: null,
+            turnTime: turnTime,
             startTime: null
         });
 
         socket.join(roomId);
         socket.emit('roomCreated', roomId);
-        console.log(`✅ Raum ${roomId} erstellt von ${playerName}`);
+        console.log(`✅ Raum ${roomId} erstellt mit ${turnTime}s Zugzeit.`);
     });
 
     socket.on('joinRoom', ({ roomId, playerName }) => {
@@ -70,7 +71,7 @@ io.on('connection', (socket) => {
             currentTurn: room.currentTurn,
             players: room.players,
             roomId,
-            timer: 10
+            timer: room.turnTime
         });
 
         startTurnTimer(roomId);
@@ -81,7 +82,7 @@ io.on('connection', (socket) => {
         if (!room) return;
 
         if (room.timer) clearInterval(room.timer);
-        let timeLeft = 10;
+        let timeLeft = room.turnTime;
         io.to(roomId).emit('timerUpdate', timeLeft);
 
         room.timer = setInterval(() => {
@@ -151,7 +152,8 @@ io.on('connection', (socket) => {
                     hits: p.hits,
                     accuracy: ((p.hits / Math.max(1, p.moves)) * 100).toFixed(1) + '%'
                 })),
-                duration
+                duration,
+                roomId
             });
             rooms.delete(roomId);
         }
@@ -163,6 +165,12 @@ io.on('connection', (socket) => {
         const chatMessage = { name, message, time: new Date().toLocaleTimeString() };
         room.chat.push(chatMessage);
         io.to(roomId).emit('newChatMessage', chatMessage);
+    });
+
+    socket.on('restartGame', (roomId) => {
+        if (!roomId) return;
+        if (!rooms.has(roomId)) return;
+        startGame(roomId);
     });
 
     socket.on('disconnect', () => {
