@@ -137,7 +137,7 @@
 <body>
   <div class="container">
     <h2>Memory Spiel Deluxe</h2>
-    <div class="inputs">
+    <div class="inputs" id="buttons">
       <input type="text" id="roomId" placeholder="Raum-ID">
       <input type="text" id="playerName" placeholder="Dein Name">
       <button onclick="createRoom()">Raum erstellen</button>
@@ -195,6 +195,7 @@
 
     socket.on('gameStart', ({ cards, currentTurn, players, roomId }) => {
       currentRoomId = roomId;
+      document.getElementById('buttons').style.display = 'none'; // 🔥 Buttons ausblenden
       renderBoard(cards, currentTurn);
       updateScore(players);
     });
