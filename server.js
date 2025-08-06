@@ -135,16 +135,25 @@ io.on('connection', (socket) => {
                     flippedCards.forEach(c => c.isFlipped = false);
                     room.locked = false;
                     switchTurn(roomId);
-                }, 1500);
+                }, 2000); // ⏳ Verlängert auf 2 Sekunden
             }
         }
 
         if (room.cards.every(c => c.isMatched)) {
             clearInterval(room.timer);
             const duration = Math.floor((Date.now() - room.startTime) / 1000);
-            const winner = room.players.reduce((a, b) => (a.score > b.score ? a : b));
+            const [p1, p2] = room.players;
+            let winnerText;
+
+            if (p1.score === p2.score) {
+                winnerText = 'Unentschieden';
+            } else {
+                const winner = p1.score > p2.score ? p1 : p2;
+                winnerText = winner.name;
+            }
+
             io.to(roomId).emit('gameEnd', { 
-                winner: winner.name,
+                winner: winnerText,
                 scores: room.players,
                 stats: room.players.map(p => ({
                     name: p.name,
