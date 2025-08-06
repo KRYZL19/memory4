@@ -5,8 +5,6 @@ const io = require('socket.io')(http, { cors: { origin: '*' } });
 
 app.use(express.static('public'));
 
-app.get('/', (req, res) => res.sendFile(__dirname + '/public/index.html'));
-
 const rooms = new Map();
 const maxCards = 16;
 const images = Array.from({ length: 45 }, (_, i) => `/images/bild${i + 1}.jpg`);
@@ -24,12 +22,14 @@ io.on('connection', (socket) => {
         if (rooms.has(roomId)) return socket.emit('joinError', 'Diese Raum-ID ist bereits vergeben.');
 
         rooms.set(roomId, {
-            players: [{ id: socket.id, name: playerName, score: 0 }],
+            players: [{ id: socket.id, name: playerName, score: 0, moves: 0, hits: 0 }],
             cards: [],
             currentTurn: null,
             gameStarted: false,
             locked: false,
-            chat: []
+            chat: [],
+            timer: null,
+            startTime: null
         });
 
         socket.join(roomId);
@@ -42,36 +42,69 @@ io.on('connection', (socket) => {
         if (!room) return socket.emit('joinError', 'Raum nicht verfügbar.');
         if (room.players.length >= 2) return socket.emit('joinError', 'Raum ist voll.');
 
-        room.players.push({ id: socket.id, name: playerName, score: 0 });
+        room.players.push({ id: socket.id, name: playerName, score: 0, moves: 0, hits: 0 });
         socket.join(roomId);
         io.to(roomId).emit('playerJoined', room.players);
         socket.emit('chatHistory', room.chat);
 
-        if (room.players.length === 2) {
-            const selectedImages = getRandomImages(maxCards / 2);
-            const cardPairs = [...selectedImages, ...selectedImages];
-            room.cards = cardPairs.sort(() => 0.5 - Math.random()).map((img, index) => ({
-                id: index,
-                image: img,
-                isFlipped: false,
-                isMatched: false
-            }));
-
-            room.currentTurn = room.players[0].id;
-            room.gameStarted = true;
-
-            io.to(roomId).emit('gameStart', {
-                cards: room.cards,
-                currentTurn: room.currentTurn,
-                players: room.players,
-                roomId // ✅ Raum-ID mitsenden
-            });
-        }
+        if (room.players.length === 2) startGame(roomId);
     });
+
+    function startGame(roomId) {
+        const room = rooms.get(roomId);
+        const selectedImages = getRandomImages(maxCards / 2);
+        const cardPairs = [...selectedImages, ...selectedImages];
+        room.cards = cardPairs.sort(() => 0.5 - Math.random()).map((img, index) => ({
+            id: index,
+            image: img,
+            isFlipped: false,
+            isMatched: false
+        }));
+
+        room.currentTurn = room.players[0].id;
+        room.gameStarted = true;
+        room.startTime = Date.now();
+
+        io.to(roomId).emit('gameStart', {
+            cards: room.cards,
+            currentTurn: room.currentTurn,
+            players: room.players,
+            roomId,
+            timer: 10
+        });
+
+        startTurnTimer(roomId);
+    }
+
+    function startTurnTimer(roomId) {
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        if (room.timer) clearInterval(room.timer);
+        let timeLeft = 10;
+        io.to(roomId).emit('timerUpdate', timeLeft);
+
+        room.timer = setInterval(() => {
+            timeLeft--;
+            io.to(roomId).emit('timerUpdate', timeLeft);
+            if (timeLeft <= 0) {
+                clearInterval(room.timer);
+                switchTurn(roomId);
+            }
+        }, 1000);
+    }
+
+    function switchTurn(roomId) {
+        const room = rooms.get(roomId);
+        if (!room) return;
+        const nextPlayer = room.players.find(p => p.id !== room.currentTurn);
+        room.currentTurn = nextPlayer.id;
+        io.to(roomId).emit('gameUpdate', { cards: room.cards, currentTurn: room.currentTurn, players: room.players });
+        startTurnTimer(roomId);
+    }
 
     socket.on('flipCard', ({ roomId, cardId }) => {
         const room = rooms.get(roomId);
-        console.log(`flipCard attempt roomId:${roomId}, socketId:${socket.id}`);
         if (!room) return socket.emit('flipError', 'Raum nicht verfügbar.');
         if (!room.gameStarted) return socket.emit('flipError', 'Das Spiel ist nicht aktiv.');
         if (room.locked) return socket.emit('flipError', 'Warte, Animation läuft.');
@@ -86,27 +119,40 @@ io.on('connection', (socket) => {
 
         if (flippedCards.length === 2) {
             room.locked = true;
+            const player = room.players.find(p => p.id === socket.id);
+            player.moves++;
+
             if (flippedCards[0].image === flippedCards[1].image) {
                 flippedCards.forEach(c => c.isMatched = true);
-                const player = room.players.find(p => p.id === socket.id);
                 player.score++;
+                player.hits++;
                 room.locked = false;
                 io.to(roomId).emit('gameUpdate', { cards: room.cards, currentTurn: room.currentTurn, players: room.players });
+                startTurnTimer(roomId);
             } else {
                 setTimeout(() => {
-    flippedCards.forEach(c => c.isFlipped = false);
-    const next = room.players.find(p => p.id !== socket.id);
-    room.currentTurn = next.id;
-    room.locked = false;
-    io.to(roomId).emit('gameUpdate', { cards: room.cards, currentTurn: room.currentTurn, players: room.players });
-}, 1500); // ⬅︎ jetzt 1,5 Sekunden
-
+                    flippedCards.forEach(c => c.isFlipped = false);
+                    room.locked = false;
+                    switchTurn(roomId);
+                }, 1500);
             }
         }
 
         if (room.cards.every(c => c.isMatched)) {
+            clearInterval(room.timer);
+            const duration = Math.floor((Date.now() - room.startTime) / 1000);
             const winner = room.players.reduce((a, b) => (a.score > b.score ? a : b));
-            io.to(roomId).emit('gameEnd', { winner: winner.name, scores: room.players });
+            io.to(roomId).emit('gameEnd', { 
+                winner: winner.name,
+                scores: room.players,
+                stats: room.players.map(p => ({
+                    name: p.name,
+                    moves: p.moves,
+                    hits: p.hits,
+                    accuracy: ((p.hits / Math.max(1, p.moves)) * 100).toFixed(1) + '%'
+                })),
+                duration
+            });
             rooms.delete(roomId);
         }
     });
