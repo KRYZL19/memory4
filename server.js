@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -6,9 +5,7 @@ const io = require('socket.io')(http, { cors: { origin: '*' } });
 
 app.use(express.static('public'));
 
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/index.html');
-});
+app.get('/', (req, res) => res.sendFile(__dirname + '/public/index.html'));
 
 const rooms = new Map();
 const maxCards = 16;
@@ -23,14 +20,8 @@ io.on('connection', (socket) => {
     console.log(`🔌 Neue Verbindung: ${socket.id}`);
 
     socket.on('createRoom', ({ roomId, playerName }) => {
-        if (!roomId || !playerName) {
-            socket.emit('joinError', 'Raum-ID und Name erforderlich.');
-            return;
-        }
-        if (rooms.has(roomId)) {
-            socket.emit('joinError', 'Diese Raum-ID ist bereits vergeben.');
-            return;
-        }
+        if (!roomId || !playerName) return socket.emit('joinError', 'Raum-ID und Name erforderlich.');
+        if (rooms.has(roomId)) return socket.emit('joinError', 'Diese Raum-ID ist bereits vergeben.');
 
         rooms.set(roomId, {
             players: [{ id: socket.id, name: playerName, score: 0 }],
@@ -72,7 +63,8 @@ io.on('connection', (socket) => {
             io.to(roomId).emit('gameStart', {
                 cards: room.cards,
                 currentTurn: room.currentTurn,
-                players: room.players
+                players: room.players,
+                roomId // ✅ Raum-ID mitsenden
             });
         }
     });
@@ -130,13 +122,10 @@ io.on('connection', (socket) => {
         for (const [roomId, room] of rooms) {
             const index = room.players.findIndex(p => p.id === socket.id);
             if (index !== -1) {
-                const leftPlayer = room.players[index].name;
                 room.players.splice(index, 1);
                 io.to(roomId).emit('playerLeft', room.players);
-
-                if (room.players.length === 0) {
-                    rooms.delete(roomId);
-                } else {
+                if (room.players.length === 0) rooms.delete(roomId);
+                else {
                     room.gameStarted = false;
                     room.cards = [];
                     room.currentTurn = null;
