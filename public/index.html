@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Online Memory Spiel</title>
+    <title>Memory Spiel</title>
     <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -13,178 +13,91 @@
 
         <!-- Menü -->
         <div id="menu" class="space-y-4">
-            <input type="text" id="playerName" placeholder="Dein Name" class="w-full p-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <input type="password" id="roomPassword" placeholder="Raum-Passwort" class="w-full p-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
-
+            <input type="text" id="roomIdInput" placeholder="Raum-ID wählen/eingeben" class="w-full p-3 text-lg border rounded-lg">
+            <input type="text" id="playerName" placeholder="Dein Name" class="w-full p-3 text-lg border rounded-lg">
             <div class="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4">
-                <button onclick="createRoom()" class="bg-blue-500 text-white px-6 py-3 text-lg rounded-lg hover:bg-blue-600 transition">Raum erstellen</button>
-                <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                    <input type="text" id="roomIdInput" placeholder="Raum-ID" class="p-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
-                    <button onclick="joinRoom()" class="bg-green-500 text-white px-6 py-3 text-lg rounded-lg hover:bg-green-600 transition">Raum beitreten</button>
-                </div>
+                <button onclick="createRoom()" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">Raum erstellen</button>
+                <button onclick="joinRoom()" class="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600">Raum beitreten</button>
             </div>
         </div>
 
-        <!-- Info-Bereiche -->
+        <!-- Infos -->
         <div id="room-id" class="text-lg text-center mt-4 text-gray-700 hidden"></div>
         <div id="players" class="text-lg text-center mt-4 text-gray-700"></div>
         <div id="score-board" class="text-lg sm:text-xl font-semibold text-center mt-4 text-gray-800"></div>
         <div id="game-board" class="grid grid-cols-4 gap-2 sm:gap-4 mt-6 justify-center"></div>
         <div id="message" class="text-center mt-4 text-lg font-semibold text-gray-700"></div>
-        <div id="debug-info" class="text-center mt-2 text-sm text-gray-500 hidden"></div>
-
-        <!-- Lade-Spinner -->
-        <div id="loading" class="hidden text-center mt-4">
-            <svg class="animate-spin h-8 w-8 text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-        </div>
     </div>
 
     <script>
-        const socket = io({
-            path: '/socket.io',
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: 10,
-            reconnectionDelay: 1000
-        });
-
+        const socket = io();
         let playerId;
 
-        // Verbindung
-        socket.on('connect', () => {
-            playerId = socket.id;
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('message').innerText = 'Verbunden! Bereit zum Spielen.';
-            console.log('✅ Verbunden:', playerId);
-        });
+        socket.on('connect', () => playerId = socket.id);
 
-        socket.on('connect_error', (err) => {
-            document.getElementById('message').innerText = `Verbindung fehlgeschlagen: ${err.message}`;
-            document.getElementById('loading').classList.add('hidden');
-        });
-
-        // Raum erstellen
         function createRoom() {
-            const playerName = document.getElementById('playerName').value.trim();
-            const password = document.getElementById('roomPassword').value.trim();
-
-            if (playerName && password) {
-                document.getElementById('loading').classList.remove('hidden');
-                socket.emit('createRoom', { playerName, password });
-            } else {
-                document.getElementById('message').innerText = 'Bitte Name und Passwort eingeben.';
-            }
-        }
-
-        // Raum beitreten
-        function joinRoom() {
-            const playerName = document.getElementById('playerName').value.trim();
             const roomId = document.getElementById('roomIdInput').value.trim();
-            const password = document.getElementById('roomPassword').value.trim();
-
-            if (playerName && roomId && password) {
-                document.getElementById('loading').classList.remove('hidden');
-                socket.emit('joinRoom', { roomId, playerName, password });
-            } else {
-                document.getElementById('message').innerText = 'Bitte Name, Raum-ID und Passwort eingeben.';
-            }
+            const playerName = document.getElementById('playerName').value.trim();
+            if (roomId && playerName) socket.emit('createRoom', { roomId, playerName });
         }
 
-        // Events vom Server
+        function joinRoom() {
+            const roomId = document.getElementById('roomIdInput').value.trim();
+            const playerName = document.getElementById('playerName').value.trim();
+            if (roomId && playerName) socket.emit('joinRoom', { roomId, playerName });
+        }
+
         socket.on('roomCreated', (roomId) => {
             document.getElementById('room-id').classList.remove('hidden');
             document.getElementById('room-id').innerText = `Raum-ID: ${roomId}`;
             document.getElementById('menu').classList.add('hidden');
-            document.getElementById('loading').classList.add('hidden');
         });
 
-        socket.on('joinError', (message) => {
-            document.getElementById('message').innerText = message;
-            document.getElementById('loading').classList.add('hidden');
-        });
-
-        socket.on('playerJoined', (players) => {
-            document.getElementById('players').innerText = `Spieler: ${players.map(p => p.name).join(', ')}`;
-            document.getElementById('loading').classList.add('hidden');
-        });
-
-        socket.on('playerLeft', (players) => {
-            document.getElementById('players').innerText = `Spieler: ${players.map(p => p.name).join(', ')}`;
-            document.getElementById('message').innerText = 'Ein Spieler hat das Spiel verlassen.';
-            document.getElementById('game-board').innerHTML = '';
-            document.getElementById('menu').classList.remove('hidden');
-        });
-
-        socket.on('gameReset', (message) => {
-            document.getElementById('message').innerText = message;
-            document.getElementById('game-board').innerHTML = '';
-            document.getElementById('menu').classList.remove('hidden');
-        });
+        socket.on('joinError', (msg) => document.getElementById('message').innerText = msg);
+        socket.on('playerJoined', (players) => document.getElementById('players').innerText = `Spieler: ${players.map(p => p.name).join(', ')}`);
+        socket.on('playerLeft', (players) => document.getElementById('message').innerText = 'Ein Spieler hat das Spiel verlassen.');
+        socket.on('gameReset', (msg) => document.getElementById('message').innerText = msg);
 
         socket.on('gameStart', ({ cards, currentTurn, players }) => {
             renderGameBoard(cards, currentTurn);
-            updateScoreBoard(players);
-            updateTurn(currentTurn);
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('message').innerText = '';
+            updateScore(players);
+            document.getElementById('message').innerText = currentTurn === playerId ? 'Du bist dran!' : 'Warte auf den anderen Spieler...';
         });
 
         socket.on('gameUpdate', ({ cards, currentTurn, players }) => {
             renderGameBoard(cards, currentTurn);
-            updateScoreBoard(players);
-            updateTurn(currentTurn);
+            updateScore(players);
+            document.getElementById('message').innerText = currentTurn === playerId ? 'Du bist dran!' : 'Warte auf den anderen Spieler...';
         });
 
         socket.on('gameEnd', ({ winner, scores }) => {
             document.getElementById('message').innerText = `Spiel vorbei! Gewinner: ${winner}`;
-            updateScoreBoard(scores);
-            document.getElementById('menu').classList.remove('hidden');
+            updateScore(scores);
         });
 
-        socket.on('flipError', (message) => {
-            document.getElementById('message').innerText = message;
-        });
+        socket.on('flipError', (msg) => document.getElementById('message').innerText = msg);
 
-        // Spielfeld rendern
         function renderGameBoard(cards, currentTurn) {
-            const gameBoard = document.getElementById('game-board');
-            gameBoard.innerHTML = '';
-            const myTurn = currentTurn === playerId;
-
+            const board = document.getElementById('game-board');
+            board.innerHTML = '';
             cards.forEach(card => {
-                const cardElement = document.createElement('div');
-                cardElement.className = `card ${card.isMatched ? 'bg-green-200' : 'bg-gray-300'} 
-                    w-16 h-16 sm:w-28 sm:h-28 rounded-lg shadow-md transition-all duration-300
-                    ${myTurn && !card.isFlipped && !card.isMatched ? 'cursor-pointer hover:bg-gray-400' : 'cursor-not-allowed opacity-75'}`;
-                
+                const div = document.createElement('div');
+                div.className = `w-16 h-16 sm:w-28 sm:h-28 rounded-lg shadow-md flex items-center justify-center bg-gray-300 ${card.isMatched ? 'bg-green-200' : ''} ${currentTurn === playerId && !card.isFlipped && !card.isMatched ? 'cursor-pointer hover:bg-gray-400' : 'cursor-not-allowed opacity-75'}`;
                 const img = document.createElement('img');
                 img.src = card.image;
                 img.className = `w-full h-full object-cover rounded-lg ${card.isFlipped || card.isMatched ? 'block' : 'hidden'}`;
-                cardElement.appendChild(img);
-
-                if (myTurn && !card.isMatched && !card.isFlipped) {
-                    cardElement.addEventListener('click', () => {
-                        socket.emit('flipCard', { roomId: document.getElementById('room-id').innerText.split(': ')[1], cardId: card.id });
-                    });
+                div.appendChild(img);
+                if (currentTurn === playerId && !card.isFlipped && !card.isMatched) {
+                    div.onclick = () => socket.emit('flipCard', { roomId: document.getElementById('room-id').innerText.split(': ')[1], cardId: card.id });
                 }
-
-                gameBoard.appendChild(cardElement);
+                board.appendChild(div);
             });
         }
 
-        // Scoreboard aktualisieren
-        function updateScoreBoard(players) {
+        function updateScore(players) {
             document.getElementById('score-board').innerHTML = players.map(p =>
                 `<span class="${p.id === playerId ? 'text-blue-600' : 'text-gray-600'}">${p.name}: ${p.score} Punkte</span>`
             ).join(' | ');
-        }
-
-        // Zug-Info aktualisieren
-        function updateTurn(currentTurn) {
-            document.getElementById('message').innerText = currentTurn === playerId ? 'Du bist dran!' : 'Warte auf den anderen Spieler...';
         }
     </script>
 </body>
