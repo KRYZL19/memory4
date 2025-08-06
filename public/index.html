@@ -8,14 +8,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gradient-to-br from-blue-100 to-purple-100 min-h-screen flex items-center justify-center">
-    <div class="game-container max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-xl shadow-lg">
-        <h1 class="text-3xl sm:text-4xl font-bold text-center text-blue-600 mb-6">Memory Spiel für Zwei</h1>
+    <div class="game-container max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-xl shadow-lg relative">
+        <h1 class="text-3xl sm:text-4xl font-bold text-center text-blue-600 mb-6">Memory Spiel</h1>
 
         <!-- Menü -->
         <div id="menu" class="space-y-4">
             <input type="text" id="roomIdInput" placeholder="Raum-ID wählen/eingeben" class="w-full p-3 text-lg border rounded-lg">
             <input type="text" id="playerName" placeholder="Dein Name" class="w-full p-3 text-lg border rounded-lg">
-            <div class="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4">
+            <div class="flex space-x-4 justify-center">
                 <button onclick="createRoom()" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">Raum erstellen</button>
                 <button onclick="joinRoom()" class="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600">Raum beitreten</button>
             </div>
@@ -23,17 +23,23 @@
 
         <!-- Infos -->
         <div id="room-id" class="text-lg text-center mt-4 text-gray-700 hidden"></div>
-        <div id="players" class="text-lg text-center mt-4 text-gray-700"></div>
-        <div id="score-board" class="text-lg sm:text-xl font-semibold text-center mt-4 text-gray-800"></div>
-        <div id="game-board" class="grid grid-cols-4 gap-2 sm:gap-4 mt-6 justify-center"></div>
-        <div id="message" class="text-center mt-4 text-lg font-semibold text-gray-700"></div>
+        <div id="players" class="text-lg text-center mt-2 text-gray-700"></div>
+        <div id="score-board" class="text-lg text-center mt-2 text-gray-800"></div>
+        <div id="game-board" class="grid grid-cols-4 gap-2 sm:gap-4 mt-4 justify-center"></div>
+        <div id="message" class="text-center mt-2 text-lg font-semibold text-gray-700"></div>
+
+        <!-- Debug -->
+        <div id="debug" class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs rounded p-2 hidden"></div>
     </div>
 
     <script>
         const socket = io();
-        let playerId;
+        let playerId, currentRoomId = null;
 
-        socket.on('connect', () => playerId = socket.id);
+        socket.on('connect', () => {
+            playerId = socket.id;
+            console.log("✅ Verbunden mit ID:", playerId);
+        });
 
         function createRoom() {
             const roomId = document.getElementById('roomIdInput').value.trim();
@@ -48,26 +54,36 @@
         }
 
         socket.on('roomCreated', (roomId) => {
+            currentRoomId = roomId;
             document.getElementById('room-id').classList.remove('hidden');
             document.getElementById('room-id').innerText = `Raum-ID: ${roomId}`;
             document.getElementById('menu').classList.add('hidden');
+            updateDebug();
         });
 
-        socket.on('joinError', (msg) => document.getElementById('message').innerText = msg);
-        socket.on('playerJoined', (players) => document.getElementById('players').innerText = `Spieler: ${players.map(p => p.name).join(', ')}`);
-        socket.on('playerLeft', (players) => document.getElementById('message').innerText = 'Ein Spieler hat das Spiel verlassen.');
-        socket.on('gameReset', (msg) => document.getElementById('message').innerText = msg);
+        socket.on('joinError', (msg) => {
+            document.getElementById('message').innerText = msg;
+            console.warn("⚠️ JoinError:", msg);
+        });
+
+        socket.on('playerJoined', (players) => {
+            document.getElementById('players').innerText = `Spieler: ${players.map(p => p.name).join(', ')}`;
+            updateDebug();
+        });
 
         socket.on('gameStart', ({ cards, currentTurn, players }) => {
+            if (!currentRoomId) currentRoomId = document.getElementById('roomIdInput').value.trim();
             renderGameBoard(cards, currentTurn);
             updateScore(players);
             document.getElementById('message').innerText = currentTurn === playerId ? 'Du bist dran!' : 'Warte auf den anderen Spieler...';
+            updateDebug(currentTurn);
         });
 
         socket.on('gameUpdate', ({ cards, currentTurn, players }) => {
             renderGameBoard(cards, currentTurn);
             updateScore(players);
             document.getElementById('message').innerText = currentTurn === playerId ? 'Du bist dran!' : 'Warte auf den anderen Spieler...';
+            updateDebug(currentTurn);
         });
 
         socket.on('gameEnd', ({ winner, scores }) => {
@@ -75,7 +91,10 @@
             updateScore(scores);
         });
 
-        socket.on('flipError', (msg) => document.getElementById('message').innerText = msg);
+        socket.on('flipError', (msg) => {
+            console.warn("⚠️ FlipError:", msg);
+            document.getElementById('message').innerText = msg;
+        });
 
         function renderGameBoard(cards, currentTurn) {
             const board = document.getElementById('game-board');
@@ -88,7 +107,7 @@
                 img.className = `w-full h-full object-cover rounded-lg ${card.isFlipped || card.isMatched ? 'block' : 'hidden'}`;
                 div.appendChild(img);
                 if (currentTurn === playerId && !card.isFlipped && !card.isMatched) {
-                    div.onclick = () => socket.emit('flipCard', { roomId: document.getElementById('room-id').innerText.split(': ')[1], cardId: card.id });
+                    div.onclick = () => socket.emit('flipCard', { roomId: currentRoomId, cardId: card.id });
                 }
                 board.appendChild(div);
             });
@@ -96,8 +115,18 @@
 
         function updateScore(players) {
             document.getElementById('score-board').innerHTML = players.map(p =>
-                `<span class="${p.id === playerId ? 'text-blue-600' : 'text-gray-600'}">${p.name}: ${p.score} Punkte</span>`
+                `<span class="${p.id === playerId ? 'text-blue-600' : 'text-gray-600'}">${p.name}: ${p.score}</span>`
             ).join(' | ');
+        }
+
+        function updateDebug(currentTurn = null) {
+            const debug = document.getElementById('debug');
+            debug.classList.remove('hidden');
+            debug.innerHTML = `
+                <div>Room ID: ${currentRoomId || '-'}</div>
+                <div>Player ID: ${playerId}</div>
+                <div>Aktueller Zug: ${currentTurn || '-'}</div>
+            `;
         }
     </script>
 </body>
