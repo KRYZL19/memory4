@@ -6,37 +6,16 @@ const io = require('socket.io')(http, { cors: { origin: '*' } });
 app.use(express.static('public'));
 
 const rooms = new Map();
-const images = Array.from({ length: 45 }, (_, i) => `/images/bild${i + 1}.jpg`);
 const maxCards = 16;
+const images = Array.from({ length: 45 }, (_, i) => `/images/bild${i + 1}.jpg`);
 
 function getRandomImages(count) {
     const shuffled = [...images].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, count);
 }
 
-// 🔥 Hilfsfunktion: Liste der offenen Räume
-function getOpenRooms() {
-    const open = [];
-    rooms.forEach((room, roomId) => {
-        if (room.players.length < 2 && !room.gameStarted) {
-            open.push({ roomId, players: room.players.map(p => p.name), turnTime: room.turnTime });
-        }
-    });
-    return open;
-}
-
 io.on('connection', (socket) => {
     console.log(`🔌 Neue Verbindung: ${socket.id}`);
-
-    // ✅ Lobby: Räume senden
-    socket.on('getRooms', () => {
-        socket.emit('roomList', getOpenRooms());
-    });
-
-    // ✅ Regelmäßige Updates für alle Lobby-Nutzer
-    const lobbyInterval = setInterval(() => {
-        socket.emit('roomList', getOpenRooms());
-    }, 3000);
 
     socket.on('createRoom', ({ roomId, playerName, turnTime }) => {
         if (!roomId || !playerName || !turnTime) return socket.emit('joinError', 'Alle Felder erforderlich.');
@@ -50,7 +29,7 @@ io.on('connection', (socket) => {
             locked: false,
             chat: [],
             timer: null,
-            turnTime,
+            turnTime: turnTime,
             startTime: null
         });
 
@@ -101,8 +80,8 @@ io.on('connection', (socket) => {
     function startTurnTimer(roomId) {
         const room = rooms.get(roomId);
         if (!room) return;
-        if (room.timer) clearInterval(room.timer);
 
+        if (room.timer) clearInterval(room.timer);
         let timeLeft = room.turnTime;
         io.to(roomId).emit('timerUpdate', timeLeft);
 
@@ -125,8 +104,76 @@ io.on('connection', (socket) => {
         startTurnTimer(roomId);
     }
 
+    socket.on('flipCard', ({ roomId, cardId }) => {
+        const room = rooms.get(roomId);
+        if (!room) return socket.emit('flipError', 'Raum nicht verfügbar.');
+        if (!room.gameStarted) return socket.emit('flipError', 'Das Spiel ist nicht aktiv.');
+        if (room.locked) return socket.emit('flipError', 'Warte, Animation läuft.');
+        if (socket.id !== room.currentTurn) return socket.emit('flipError', 'Nicht dein Zug.');
+
+        const card = room.cards[cardId];
+        if (!card || card.isFlipped || card.isMatched) return;
+
+        card.isFlipped = true;
+        const flippedCards = room.cards.filter(c => c.isFlipped && !c.isMatched);
+        io.to(roomId).emit('gameUpdate', { cards: room.cards, currentTurn: room.currentTurn, players: room.players });
+
+        if (flippedCards.length === 2) {
+            room.locked = true;
+            const player = room.players.find(p => p.id === socket.id);
+            player.moves++;
+
+            if (flippedCards[0].image === flippedCards[1].image) {
+                flippedCards.forEach(c => c.isMatched = true);
+                player.score++;
+                player.hits++;
+                room.locked = false;
+                io.to(roomId).emit('gameUpdate', { cards: room.cards, currentTurn: room.currentTurn, players: room.players });
+                startTurnTimer(roomId);
+            } else {
+                setTimeout(() => {
+                    flippedCards.forEach(c => c.isFlipped = false);
+                    room.locked = false;
+                    switchTurn(roomId);
+                }, 1500);
+            }
+        }
+
+        if (room.cards.every(c => c.isMatched)) {
+            clearInterval(room.timer);
+            const duration = Math.floor((Date.now() - room.startTime) / 1000);
+            const winner = room.players.reduce((a, b) => (a.score > b.score ? a : b));
+            io.to(roomId).emit('gameEnd', { 
+                winner: winner.name,
+                scores: room.players,
+                stats: room.players.map(p => ({
+                    name: p.name,
+                    moves: p.moves,
+                    hits: p.hits,
+                    accuracy: ((p.hits / Math.max(1, p.moves)) * 100).toFixed(1) + '%'
+                })),
+                duration,
+                roomId
+            });
+            rooms.delete(roomId);
+        }
+    });
+
+    socket.on('sendChatMessage', ({ roomId, name, message }) => {
+        const room = rooms.get(roomId);
+        if (!room) return;
+        const chatMessage = { name, message, time: new Date().toLocaleTimeString() };
+        room.chat.push(chatMessage);
+        io.to(roomId).emit('newChatMessage', chatMessage);
+    });
+
+    socket.on('restartGame', (roomId) => {
+        if (!roomId) return;
+        if (!rooms.has(roomId)) return;
+        startGame(roomId);
+    });
+
     socket.on('disconnect', () => {
-        clearInterval(lobbyInterval);
         for (const [roomId, room] of rooms) {
             const index = room.players.findIndex(p => p.id === socket.id);
             if (index !== -1) {
