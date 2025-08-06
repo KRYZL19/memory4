@@ -40,7 +40,9 @@
     #emoji-bar button { font-size: 18px; margin: 2px; cursor: pointer; }
     #darkModeToggle { position: absolute; top: 10px; right: 10px; cursor: pointer; }
     #winner { text-align: center; font-size: 1.5rem; color: var(--primary); margin-top: 10px; }
-    #newGameBtn { display:none; margin: 10px auto; padding:10px; font-size:16px; background:#2ecc71; color:white; border:none; border-radius:8px; cursor:pointer; }
+    #newGameBtn, #backBtn { display:none; margin: 10px auto; padding:10px; font-size:16px; border:none; border-radius:8px; cursor:pointer; }
+    #newGameBtn { background:#2ecc71; color:white; }
+    #backBtn { background:#e74c3c; color:white; }
     canvas#confetti { position: fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:999; }
     @media (max-width: 480px) { #game-board { gap: 8px; } }
   </style>
@@ -68,6 +70,7 @@
     <div id="game-board"></div>
     <div id="winner"></div>
     <button id="newGameBtn" onclick="restartGame()">Neues Spiel starten</button>
+    <button id="backBtn" onclick="returnToMenu()">Zurück zum Hauptmenü</button>
     <div id="chat"></div>
     <div id="chat-input">
       <input type="text" id="chatMessage" placeholder="Nachricht...">
@@ -127,7 +130,10 @@
       socket.emit('restartGame', currentRoomId);
       document.getElementById('winner').innerHTML = '';
       document.getElementById('newGameBtn').style.display = 'none';
+      document.getElementById('backBtn').style.display = 'none';
     }
+
+    function returnToMenu() { location.reload(); }
 
     document.getElementById('chatMessage').addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
 
@@ -148,14 +154,26 @@
 
     socket.on('roomCreated', roomId => { currentRoomId = roomId; document.getElementById('info').innerText = `Raum erstellt: ${roomId}`; });
     socket.on('playerJoined', players => { document.getElementById('info').innerText = 'Spieler: ' + players.map(p => p.name).join(', '); if (!currentRoomId) currentRoomId = document.getElementById('roomId').value.trim(); });
-    socket.on('gameStart', ({ cards, currentTurn, players, roomId }) => { currentRoomId = roomId; document.getElementById('buttons').style.display = 'none'; renderBoard(cards, currentTurn); updateScore(players); document.getElementById('winner').innerHTML = ''; document.getElementById('newGameBtn').style.display = 'none'; });
+    socket.on('gameStart', ({ cards, currentTurn, players, roomId }) => { 
+      currentRoomId = roomId; 
+      document.getElementById('buttons').style.display = 'none'; 
+      renderBoard(cards, currentTurn); 
+      updateScore(players); 
+      document.getElementById('winner').innerHTML = ''; 
+      document.getElementById('newGameBtn').style.display = 'none'; 
+      document.getElementById('backBtn').style.display = 'none';
+    });
     socket.on('timerUpdate', (t) => document.getElementById('timer').innerText = `⏱ Zugzeit: ${t}s`);
     socket.on('gameUpdate', ({ cards, currentTurn, players }) => { renderBoard(cards, currentTurn); updateScore(players); });
-    socket.on('gameEnd', ({ winner, scores, stats, duration, roomId }) => {
-      document.getElementById('winner').innerHTML = `🏆 ${winner} hat gewonnen!<br><small>Dauer: ${duration}s</small>`;
+    socket.on('gameEnd', ({ winner, scores, stats, duration }) => {
+      document.getElementById('winner').innerHTML = 
+        winner === 'Unentschieden' 
+        ? `🤝 Unentschieden!<br><small>Dauer: ${duration}s</small>` 
+        : `🏆 ${winner} hat gewonnen!<br><small>Dauer: ${duration}s</small>`;
       showStats(stats);
       launchConfetti();
       document.getElementById('newGameBtn').style.display = 'block';
+      document.getElementById('backBtn').style.display = 'block';
     });
     socket.on('flipError', msg => document.getElementById('info').innerText = msg);
     socket.on('chatHistory', msgs => { const chat = document.getElementById('chat'); chat.innerHTML = ''; msgs.forEach(m => appendChat(m)); });
@@ -175,19 +193,15 @@
         wrapper.className = `card ${card.isFlipped || card.isMatched ? 'flipped' : ''}`;
         const inner = document.createElement('div');
         inner.className = 'card-inner';
-
         const front = document.createElement('div');
         front.className = 'card-front';
         front.textContent = '?';
-
         const back = document.createElement('div');
         back.className = 'card-back';
         back.style.backgroundImage = `url(${card.image})`;
-
         inner.appendChild(front);
         inner.appendChild(back);
         wrapper.appendChild(inner);
-
         if (currentTurn === playerId && !card.isFlipped && !card.isMatched) {
           wrapper.addEventListener('click', () => socket.emit('flipCard', { roomId: currentRoomId, cardId: card.id }));
         }
