@@ -10,8 +10,12 @@
 <body class="bg-gradient-to-br from-blue-100 to-purple-100 min-h-screen flex items-center justify-center">
     <div class="game-container max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-xl shadow-lg">
         <h1 class="text-3xl sm:text-4xl font-bold text-center text-blue-600 mb-6">Memory Spiel für Zwei</h1>
+
+        <!-- Menü -->
         <div id="menu" class="space-y-4">
             <input type="text" id="playerName" placeholder="Dein Name" class="w-full p-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <input type="password" id="roomPassword" placeholder="Raum-Passwort" class="w-full p-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+
             <div class="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4">
                 <button onclick="createRoom()" class="bg-blue-500 text-white px-6 py-3 text-lg rounded-lg hover:bg-blue-600 transition">Raum erstellen</button>
                 <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
@@ -20,12 +24,16 @@
                 </div>
             </div>
         </div>
+
+        <!-- Info-Bereiche -->
         <div id="room-id" class="text-lg text-center mt-4 text-gray-700 hidden"></div>
         <div id="players" class="text-lg text-center mt-4 text-gray-700"></div>
-        <div id="score-board" class="score-board text-lg sm:text-xl font-semibold text-center mt-4 text-gray-800"></div>
-        <div id="game-board" class="game-board grid grid-cols-4 gap-2 sm:gap-4 mt-6 justify-center"></div>
+        <div id="score-board" class="text-lg sm:text-xl font-semibold text-center mt-4 text-gray-800"></div>
+        <div id="game-board" class="grid grid-cols-4 gap-2 sm:gap-4 mt-6 justify-center"></div>
         <div id="message" class="text-center mt-4 text-lg font-semibold text-gray-700"></div>
         <div id="debug-info" class="text-center mt-2 text-sm text-gray-500 hidden"></div>
+
+        <!-- Lade-Spinner -->
         <div id="loading" class="hidden text-center mt-4">
             <svg class="animate-spin h-8 w-8 text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -37,78 +45,70 @@
     <script>
         const socket = io({
             path: '/socket.io',
-            transports: ['websocket', 'polling'], // Fallback auf Polling
+            transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionAttempts: 10,
             reconnectionDelay: 1000
         });
+
         let playerId;
 
+        // Verbindung
         socket.on('connect', () => {
             playerId = socket.id;
             document.getElementById('loading').classList.add('hidden');
             document.getElementById('message').innerText = 'Verbunden! Bereit zum Spielen.';
-            document.getElementById('debug-info').classList.remove('hidden');
-            document.getElementById('debug-info').innerText = `Deine Spieler-ID: ${playerId}`;
-            console.log('Connected with playerId:', playerId, 'at', new Date().toLocaleString());
+            console.log('✅ Verbunden:', playerId);
         });
 
         socket.on('connect_error', (err) => {
-            document.getElementById('message').innerText = `Verbindung fehlgeschlagen: ${err.message}. Bitte versuche es erneut.`;
+            document.getElementById('message').innerText = `Verbindung fehlgeschlagen: ${err.message}`;
             document.getElementById('loading').classList.add('hidden');
-            console.error('Connection error:', err.message, 'at', new Date().toLocaleString());
         });
 
-        socket.on('reconnect_attempt', (attempt) => {
-            document.getElementById('message').innerText = `Versuche erneut zu verbinden... (Versuch ${attempt}/10)`;
-            console.log('Reconnect attempt:', attempt);
-        });
-
-        socket.on('reconnect', () => {
-            document.getElementById('message').innerText = 'Wiederverbunden! Bereit zum Spielen.';
-            console.log('Reconnected with playerId:', playerId);
-        });
-
-        socket.on('flipError', (message) => {
-            document.getElementById('message').innerText = message;
-            console.error('Flip error:', message);
-        });
-
+        // Raum erstellen
         function createRoom() {
             const playerName = document.getElementById('playerName').value.trim();
-            if (playerName) {
+            const password = document.getElementById('roomPassword').value.trim();
+
+            if (playerName && password) {
                 document.getElementById('loading').classList.remove('hidden');
-                document.getElementById('message').innerText = '';
-                socket.emit('createRoom', playerName);
+                socket.emit('createRoom', { playerName, password });
             } else {
-                document.getElementById('message').innerText = 'Bitte gib einen Namen ein.';
+                document.getElementById('message').innerText = 'Bitte Name und Passwort eingeben.';
             }
         }
 
+        // Raum beitreten
         function joinRoom() {
             const playerName = document.getElementById('playerName').value.trim();
             const roomId = document.getElementById('roomIdInput').value.trim();
-            if (playerName && roomId) {
+            const password = document.getElementById('roomPassword').value.trim();
+
+            if (playerName && roomId && password) {
                 document.getElementById('loading').classList.remove('hidden');
-                document.getElementById('message').innerText = '';
-                socket.emit('joinRoom', { roomId, playerName });
+                socket.emit('joinRoom', { roomId, playerName, password });
             } else {
-                document.getElementById('message').innerText = 'Bitte gib Name und Raum-ID ein.';
+                document.getElementById('message').innerText = 'Bitte Name, Raum-ID und Passwort eingeben.';
             }
         }
 
+        // Events vom Server
         socket.on('roomCreated', (roomId) => {
             document.getElementById('room-id').classList.remove('hidden');
             document.getElementById('room-id').innerText = `Raum-ID: ${roomId}`;
             document.getElementById('menu').classList.add('hidden');
             document.getElementById('loading').classList.add('hidden');
-            console.log('Room created:', roomId);
+        });
+
+        socket.on('joinError', (message) => {
+            document.getElementById('message').innerText = message;
+            document.getElementById('loading').classList.add('hidden');
         });
 
         socket.on('playerJoined', (players) => {
             document.getElementById('players').innerText = `Spieler: ${players.map(p => p.name).join(', ')}`;
             document.getElementById('loading').classList.add('hidden');
-            console.log('Players in room:', players);
         });
 
         socket.on('playerLeft', (players) => {
@@ -116,85 +116,75 @@
             document.getElementById('message').innerText = 'Ein Spieler hat das Spiel verlassen.';
             document.getElementById('game-board').innerHTML = '';
             document.getElementById('menu').classList.remove('hidden');
-            console.log('Player left, remaining players:', players);
         });
 
         socket.on('gameReset', (message) => {
             document.getElementById('message').innerText = message;
             document.getElementById('game-board').innerHTML = '';
             document.getElementById('menu').classList.remove('hidden');
-            console.log('Game reset:', message);
-        });
-
-        socket.on('joinError', (message) => {
-            document.getElementById('message').innerText = message;
-            document.getElementById('loading').classList.add('hidden');
-            console.error('Join error:', message);
         });
 
         socket.on('gameStart', ({ cards, currentTurn, players }) => {
-            document.getElementById('message').innerText = '';
-            document.getElementById('loading').classList.add('hidden');
             renderGameBoard(cards, currentTurn);
             updateScoreBoard(players);
             updateTurn(currentTurn);
-            console.log('Game started, currentTurn:', currentTurn, 'playerId:', playerId, 'is my turn?', currentTurn === playerId);
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('message').innerText = '';
         });
 
         socket.on('gameUpdate', ({ cards, currentTurn, players }) => {
             renderGameBoard(cards, currentTurn);
             updateScoreBoard(players);
             updateTurn(currentTurn);
-            console.log('Game update, currentTurn:', currentTurn, 'playerId:', playerId, 'is my turn?', currentTurn === playerId);
         });
 
         socket.on('gameEnd', ({ winner, scores }) => {
             document.getElementById('message').innerText = `Spiel vorbei! Gewinner: ${winner}`;
             updateScoreBoard(scores);
             document.getElementById('menu').classList.remove('hidden');
-            console.log('Game ended, winner:', winner);
         });
 
+        socket.on('flipError', (message) => {
+            document.getElementById('message').innerText = message;
+        });
+
+        // Spielfeld rendern
         function renderGameBoard(cards, currentTurn) {
             const gameBoard = document.getElementById('game-board');
             gameBoard.innerHTML = '';
-            console.log('Rendering game board, currentTurn:', currentTurn, 'playerId:', playerId, 'is my turn?', currentTurn === playerId);
+            const myTurn = currentTurn === playerId;
+
             cards.forEach(card => {
                 const cardElement = document.createElement('div');
-                cardElement.className = `card ${card.isFlipped ? 'flipped' : ''} ${card.isMatched ? 'matched bg-green-200' : 'bg-gray-300'} w-16 h-16 sm:w-28 sm:h-28 rounded-lg shadow-md transition-all duration-300 touch-none select-none ${currentTurn === playerId ? 'cursor-pointer hover:bg-gray-400' : 'cursor-not-allowed opacity-75'}`;
-                cardElement.dataset.id = card.id;
+                cardElement.className = `card ${card.isMatched ? 'bg-green-200' : 'bg-gray-300'} 
+                    w-16 h-16 sm:w-28 sm:h-28 rounded-lg shadow-md transition-all duration-300
+                    ${myTurn && !card.isFlipped && !card.isMatched ? 'cursor-pointer hover:bg-gray-400' : 'cursor-not-allowed opacity-75'}`;
+                
                 const img = document.createElement('img');
                 img.src = card.image;
                 img.className = `w-full h-full object-cover rounded-lg ${card.isFlipped || card.isMatched ? 'block' : 'hidden'}`;
                 cardElement.appendChild(img);
-                if (!card.isMatched && !card.isFlipped && currentTurn === playerId) {
+
+                if (myTurn && !card.isMatched && !card.isFlipped) {
                     cardElement.addEventListener('click', () => {
                         socket.emit('flipCard', { roomId: document.getElementById('room-id').innerText.split(': ')[1], cardId: card.id });
-                        cardElement.classList.add('scale-95');
-                        setTimeout(() => cardElement.classList.remove('scale-95'), 200);
-                        console.log('Card clicked:', card.id, 'by player:', playerId);
-                    });
-                    cardElement.addEventListener('touchstart', (e) => {
-                        e.preventDefault();
-                        socket.emit('flipCard', { roomId: document.getElementById('room-id').innerText.split(': ')[1], cardId: card.id });
-                        cardElement.classList.add('scale-95');
-                        setTimeout(() => cardElement.classList.remove('scale-95'), 200);
-                        console.log('Card touched:', card.id, 'by player:', playerId);
                     });
                 }
+
                 gameBoard.appendChild(cardElement);
             });
         }
 
+        // Scoreboard aktualisieren
         function updateScoreBoard(players) {
-            document.getElementById('score-board').innerHTML = players.map(p => `<span class="${p.id === playerId ? 'text-blue-600' : 'text-gray-600'}">${p.name}: ${p.score} Punkte</span>`).join(' | ');
-            console.log('Scoreboard updated:', players);
+            document.getElementById('score-board').innerHTML = players.map(p =>
+                `<span class="${p.id === playerId ? 'text-blue-600' : 'text-gray-600'}">${p.name}: ${p.score} Punkte</span>`
+            ).join(' | ');
         }
 
+        // Zug-Info aktualisieren
         function updateTurn(currentTurn) {
             document.getElementById('message').innerText = currentTurn === playerId ? 'Du bist dran!' : 'Warte auf den anderen Spieler...';
-            document.getElementById('debug-info').innerText = `Deine Spieler-ID: ${playerId} | Aktueller Zug: ${currentTurn}`;
-            console.log('Current turn:', currentTurn, 'playerId:', playerId, 'is my turn?', currentTurn === playerId);
         }
     </script>
 </body>
