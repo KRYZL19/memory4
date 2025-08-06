@@ -3,18 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memory Spiel</title>
+    <title>Memory Spiel Deluxe</title>
     <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card {
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+            cursor: pointer;
+        }
+        .flipped {
+            transform: rotateY(180deg);
+        }
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 0.5rem;
+        }
+        .card-back {
+            transform: rotateY(180deg);
+        }
+    </style>
 </head>
 <body class="bg-gradient-to-br from-blue-100 to-purple-100 min-h-screen flex items-center justify-center">
     <div class="game-container max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-xl shadow-lg relative">
-        <h1 class="text-3xl sm:text-4xl font-bold text-center text-blue-600 mb-6">Memory Spiel</h1>
+        <h1 class="text-3xl sm:text-4xl font-bold text-center text-blue-600 mb-4">Memory Spiel Deluxe</h1>
 
         <!-- Menü -->
         <div id="menu" class="space-y-4">
-            <input type="text" id="roomIdInput" placeholder="Raum-ID wählen/eingeben" class="w-full p-3 text-lg border rounded-lg">
-            <input type="text" id="playerName" placeholder="Dein Name" class="w-full p-3 text-lg border rounded-lg">
+            <input type="text" id="roomIdInput" placeholder="Raum-ID wählen/eingeben" class="w-full p-3 border rounded-lg">
+            <input type="text" id="playerName" placeholder="Dein Name" class="w-full p-3 border rounded-lg">
+            <select id="pairCount" class="w-full p-3 border rounded-lg">
+                <option value="8">8 Paare</option>
+                <option value="10">10 Paare</option>
+                <option value="12">12 Paare</option>
+                <option value="14">14 Paare</option>
+                <option value="16" selected>16 Paare</option>
+            </select>
             <div class="flex space-x-4 justify-center">
                 <button onclick="createRoom()" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">Raum erstellen</button>
                 <button onclick="joinRoom()" class="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600">Raum beitreten</button>
@@ -23,28 +55,27 @@
 
         <!-- Infos -->
         <div id="room-id" class="text-lg text-center mt-4 text-gray-700 hidden"></div>
+        <button id="copyBtn" class="hidden bg-gray-300 px-2 py-1 rounded text-xs mx-auto block mt-2">Raum-ID kopieren</button>
         <div id="players" class="text-lg text-center mt-2 text-gray-700"></div>
+        <div id="timer" class="text-center mt-2 text-lg text-red-500 font-bold hidden"></div>
         <div id="score-board" class="text-lg text-center mt-2 text-gray-800"></div>
         <div id="game-board" class="grid grid-cols-4 gap-2 sm:gap-4 mt-4 justify-center"></div>
         <div id="message" class="text-center mt-2 text-lg font-semibold text-gray-700"></div>
-
-        <!-- Debug -->
-        <div id="debug" class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs rounded p-2 hidden"></div>
+        <div id="winner" class="text-center mt-4 text-2xl font-bold text-green-600 hidden"></div>
+        <button id="restartBtn" class="hidden mt-4 mx-auto bg-blue-600 text-white px-4 py-2 rounded">Neue Runde starten</button>
     </div>
 
     <script>
         const socket = io();
-        let playerId, currentRoomId = null;
+        let playerId, currentRoomId = null, turnTimer = null;
 
-        socket.on('connect', () => {
-            playerId = socket.id;
-            console.log("✅ Verbunden mit ID:", playerId);
-        });
+        socket.on('connect', () => { playerId = socket.id; });
 
         function createRoom() {
             const roomId = document.getElementById('roomIdInput').value.trim();
             const playerName = document.getElementById('playerName').value.trim();
-            if (roomId && playerName) socket.emit('createRoom', { roomId, playerName });
+            const pairCount = parseInt(document.getElementById('pairCount').value);
+            if (roomId && playerName) socket.emit('createRoom', { roomId, playerName, pairCount });
         }
 
         function joinRoom() {
@@ -53,80 +84,99 @@
             if (roomId && playerName) socket.emit('joinRoom', { roomId, playerName });
         }
 
+        // Kopierbutton
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(currentRoomId);
+            alert('Raum-ID kopiert!');
+        });
+
+        // Neustart
+        document.getElementById('restartBtn').addEventListener('click', () => window.location.reload());
+
+        // Server Events
         socket.on('roomCreated', (roomId) => {
             currentRoomId = roomId;
             document.getElementById('room-id').classList.remove('hidden');
             document.getElementById('room-id').innerText = `Raum-ID: ${roomId}`;
+            document.getElementById('copyBtn').classList.remove('hidden');
             document.getElementById('menu').classList.add('hidden');
-            updateDebug();
         });
 
-        socket.on('joinError', (msg) => {
-            document.getElementById('message').innerText = msg;
-            console.warn("⚠️ JoinError:", msg);
-        });
-
-        socket.on('playerJoined', (players) => {
-            document.getElementById('players').innerText = `Spieler: ${players.map(p => p.name).join(', ')}`;
-            updateDebug();
-        });
+        socket.on('playerJoined', (players) => updatePlayers(players));
 
         socket.on('gameStart', ({ cards, currentTurn, players }) => {
-            if (!currentRoomId) currentRoomId = document.getElementById('roomIdInput').value.trim();
+            document.getElementById('winner').classList.add('hidden');
             renderGameBoard(cards, currentTurn);
-            updateScore(players);
-            document.getElementById('message').innerText = currentTurn === playerId ? 'Du bist dran!' : 'Warte auf den anderen Spieler...';
-            updateDebug(currentTurn);
+            updatePlayers(players);
+            startTimer(15);
         });
 
         socket.on('gameUpdate', ({ cards, currentTurn, players }) => {
             renderGameBoard(cards, currentTurn);
-            updateScore(players);
-            document.getElementById('message').innerText = currentTurn === playerId ? 'Du bist dran!' : 'Warte auf den anderen Spieler...';
-            updateDebug(currentTurn);
+            updatePlayers(players, currentTurn);
+            startTimer(15);
         });
 
         socket.on('gameEnd', ({ winner, scores }) => {
-            document.getElementById('message').innerText = `Spiel vorbei! Gewinner: ${winner}`;
-            updateScore(scores);
+            document.getElementById('winner').innerText = `🏆 ${winner} ist der Sieger!`;
+            document.getElementById('winner').classList.remove('hidden');
+            updatePlayers(scores);
+            document.getElementById('restartBtn').classList.remove('hidden');
+            clearInterval(turnTimer);
         });
 
-        socket.on('flipError', (msg) => {
-            console.warn("⚠️ FlipError:", msg);
-            document.getElementById('message').innerText = msg;
-        });
+        socket.on('flipError', (msg) => document.getElementById('message').innerText = msg);
 
         function renderGameBoard(cards, currentTurn) {
             const board = document.getElementById('game-board');
             board.innerHTML = '';
             cards.forEach(card => {
-                const div = document.createElement('div');
-                div.className = `w-16 h-16 sm:w-28 sm:h-28 rounded-lg shadow-md flex items-center justify-center bg-gray-300 ${card.isMatched ? 'bg-green-200' : ''} ${currentTurn === playerId && !card.isFlipped && !card.isMatched ? 'cursor-pointer hover:bg-gray-400' : 'cursor-not-allowed opacity-75'}`;
+                const wrapper = document.createElement('div');
+                wrapper.className = `card w-16 h-16 sm:w-28 sm:h-28 ${card.isFlipped || card.isMatched ? 'flipped' : ''}`;
+                const inner = document.createElement('div');
+                inner.className = 'card-inner';
+
+                const front = document.createElement('div');
+                front.className = 'card-front bg-gray-300';
+
+                const back = document.createElement('div');
+                back.className = 'card-back';
                 const img = document.createElement('img');
                 img.src = card.image;
-                img.className = `w-full h-full object-cover rounded-lg ${card.isFlipped || card.isMatched ? 'block' : 'hidden'}`;
-                div.appendChild(img);
+                img.className = 'w-full h-full object-cover rounded-lg';
+                back.appendChild(img);
+
+                inner.appendChild(front);
+                inner.appendChild(back);
+                wrapper.appendChild(inner);
+
                 if (currentTurn === playerId && !card.isFlipped && !card.isMatched) {
-                    div.onclick = () => socket.emit('flipCard', { roomId: currentRoomId, cardId: card.id });
+                    wrapper.addEventListener('click', () => socket.emit('flipCard', { roomId: currentRoomId, cardId: card.id }));
                 }
-                board.appendChild(div);
+                board.appendChild(wrapper);
             });
         }
 
-        function updateScore(players) {
+        function updatePlayers(players, currentTurn = null) {
+            document.getElementById('players').innerHTML = players.map(p =>
+                `<span class="${p.id === currentTurn ? 'text-green-600 font-bold' : ''}">${p.name}</span>`
+            ).join(' vs ');
             document.getElementById('score-board').innerHTML = players.map(p =>
                 `<span class="${p.id === playerId ? 'text-blue-600' : 'text-gray-600'}">${p.name}: ${p.score}</span>`
             ).join(' | ');
         }
 
-        function updateDebug(currentTurn = null) {
-            const debug = document.getElementById('debug');
-            debug.classList.remove('hidden');
-            debug.innerHTML = `
-                <div>Room ID: ${currentRoomId || '-'}</div>
-                <div>Player ID: ${playerId}</div>
-                <div>Aktueller Zug: ${currentTurn || '-'}</div>
-            `;
+        function startTimer(seconds) {
+            clearInterval(turnTimer);
+            const timerEl = document.getElementById('timer');
+            timerEl.classList.remove('hidden');
+            let timeLeft = seconds;
+            timerEl.innerText = `⏳ Zugzeit: ${timeLeft}s`;
+            turnTimer = setInterval(() => {
+                timeLeft--;
+                timerEl.innerText = `⏳ Zugzeit: ${timeLeft}s`;
+                if (timeLeft <= 0) clearInterval(turnTimer);
+            }, 1000);
         }
     </script>
 </body>
