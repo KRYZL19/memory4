@@ -3,180 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memory Spiel Deluxe</title>
+    <title>Memory Spiel mit Chat</title>
     <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .card {
-            transform-style: preserve-3d;
-            transition: transform 0.6s;
-            cursor: pointer;
-        }
-        .flipped {
-            transform: rotateY(180deg);
-        }
-        .card-inner {
-            position: relative;
-            width: 100%;
-            height: 100%;
-        }
-        .card-front, .card-back {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            backface-visibility: hidden;
-            border-radius: 0.5rem;
-        }
-        .card-back {
-            transform: rotateY(180deg);
-        }
+        body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 800px; max-width: 95%; }
+        #game-board { display: grid; grid-template-columns: repeat(4, 80px); gap: 10px; margin-top: 15px; }
+        .card { width: 80px; height: 80px; background: #ccc; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; }
+        #chat { border: 1px solid #ddd; height: 150px; overflow-y: auto; margin-top: 15px; padding: 5px; background: #fafafa; font-size: 14px; }
+        #chat-input { display: flex; margin-top: 5px; }
+        #chat-input input { flex: 1; padding: 5px; }
+        #chat-input button { padding: 5px 10px; }
+        .score { margin-top: 10px; font-weight: bold; }
     </style>
 </head>
-<body class="bg-gradient-to-br from-blue-100 to-purple-100 min-h-screen flex items-center justify-center">
-    <div class="game-container max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-xl shadow-lg relative">
-        <h1 class="text-3xl sm:text-4xl font-bold text-center text-blue-600 mb-4">Memory Spiel Deluxe</h1>
-
-        <!-- Menü -->
-        <div id="menu" class="space-y-4">
-            <input type="text" id="roomIdInput" placeholder="Raum-ID wählen/eingeben" class="w-full p-3 border rounded-lg">
-            <input type="text" id="playerName" placeholder="Dein Name" class="w-full p-3 border rounded-lg">
-            <select id="pairCount" class="w-full p-3 border rounded-lg">
-                <option value="8">8 Paare</option>
-                <option value="10">10 Paare</option>
-                <option value="12">12 Paare</option>
-                <option value="14">14 Paare</option>
-                <option value="16" selected>16 Paare</option>
-            </select>
-            <div class="flex space-x-4 justify-center">
-                <button onclick="createRoom()" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">Raum erstellen</button>
-                <button onclick="joinRoom()" class="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600">Raum beitreten</button>
-            </div>
+<body>
+    <div class="container">
+        <h2>Memory Spiel mit Chat</h2>
+        <div>
+            <input type="text" id="roomId" placeholder="Raum-ID"> 
+            <input type="text" id="playerName" placeholder="Dein Name">
+            <button onclick="createRoom()">Raum erstellen</button>
+            <button onclick="joinRoom()">Raum beitreten</button>
         </div>
+        <div id="info"></div>
+        <div class="score" id="score"></div>
+        <div id="game-board"></div>
 
-        <!-- Infos -->
-        <div id="room-id" class="text-lg text-center mt-4 text-gray-700 hidden"></div>
-        <button id="copyBtn" class="hidden bg-gray-300 px-2 py-1 rounded text-xs mx-auto block mt-2">Raum-ID kopieren</button>
-        <div id="players" class="text-lg text-center mt-2 text-gray-700"></div>
-        <div id="timer" class="text-center mt-2 text-lg text-red-500 font-bold hidden"></div>
-        <div id="score-board" class="text-lg text-center mt-2 text-gray-800"></div>
-        <div id="game-board" class="grid grid-cols-4 gap-2 sm:gap-4 mt-4 justify-center"></div>
-        <div id="message" class="text-center mt-2 text-lg font-semibold text-gray-700"></div>
-        <div id="winner" class="text-center mt-4 text-2xl font-bold text-green-600 hidden"></div>
-        <button id="restartBtn" class="hidden mt-4 mx-auto bg-blue-600 text-white px-4 py-2 rounded">Neue Runde starten</button>
+        <div id="chat"></div>
+        <div id="chat-input">
+            <input type="text" id="chatMessage" placeholder="Nachricht eingeben...">
+            <button onclick="sendMessage()">Senden</button>
+        </div>
     </div>
 
     <script>
         const socket = io();
-        let playerId, currentRoomId = null, turnTimer = null;
+        let playerId, currentRoomId = null;
 
         socket.on('connect', () => { playerId = socket.id; });
 
         function createRoom() {
-            const roomId = document.getElementById('roomIdInput').value.trim();
+            const roomId = document.getElementById('roomId').value.trim();
             const playerName = document.getElementById('playerName').value.trim();
-            const pairCount = parseInt(document.getElementById('pairCount').value);
-            if (roomId && playerName) socket.emit('createRoom', { roomId, playerName, pairCount });
+            if (roomId && playerName) socket.emit('createRoom', { roomId, playerName });
         }
 
         function joinRoom() {
-            const roomId = document.getElementById('roomIdInput').value.trim();
+            const roomId = document.getElementById('roomId').value.trim();
             const playerName = document.getElementById('playerName').value.trim();
             if (roomId && playerName) socket.emit('joinRoom', { roomId, playerName });
         }
 
-        // Kopierbutton
-        document.getElementById('copyBtn').addEventListener('click', () => {
-            navigator.clipboard.writeText(currentRoomId);
-            alert('Raum-ID kopiert!');
+        function sendMessage() {
+            const message = document.getElementById('chatMessage').value.trim();
+            if (message && currentRoomId) {
+                socket.emit('sendChatMessage', { roomId: currentRoomId, name: document.getElementById('playerName').value.trim(), message });
+                document.getElementById('chatMessage').value = '';
+            }
+        }
+
+        document.getElementById('chatMessage').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
         });
 
-        // Neustart
-        document.getElementById('restartBtn').addEventListener('click', () => window.location.reload());
-
-        // Server Events
         socket.on('roomCreated', (roomId) => {
             currentRoomId = roomId;
-            document.getElementById('room-id').classList.remove('hidden');
-            document.getElementById('room-id').innerText = `Raum-ID: ${roomId}`;
-            document.getElementById('copyBtn').classList.remove('hidden');
-            document.getElementById('menu').classList.add('hidden');
+            document.getElementById('info').innerText = `Raum erstellt: ${roomId}`;
         });
 
-        socket.on('playerJoined', (players) => updatePlayers(players));
+        socket.on('joinError', (msg) => {
+            document.getElementById('info').innerText = msg;
+        });
+
+        socket.on('playerJoined', (players) => {
+            document.getElementById('info').innerText = 'Spieler: ' + players.map(p => p.name).join(', ');
+        });
 
         socket.on('gameStart', ({ cards, currentTurn, players }) => {
-            document.getElementById('winner').classList.add('hidden');
-            renderGameBoard(cards, currentTurn);
-            updatePlayers(players);
-            startTimer(15);
+            renderBoard(cards, currentTurn);
+            updateScore(players);
         });
 
         socket.on('gameUpdate', ({ cards, currentTurn, players }) => {
-            renderGameBoard(cards, currentTurn);
-            updatePlayers(players, currentTurn);
-            startTimer(15);
+            renderBoard(cards, currentTurn);
+            updateScore(players);
         });
 
         socket.on('gameEnd', ({ winner, scores }) => {
-            document.getElementById('winner').innerText = `🏆 ${winner} ist der Sieger!`;
-            document.getElementById('winner').classList.remove('hidden');
-            updatePlayers(scores);
-            document.getElementById('restartBtn').classList.remove('hidden');
-            clearInterval(turnTimer);
+            document.getElementById('info').innerText = `Spiel beendet! Gewinner: ${winner}`;
+            updateScore(scores);
         });
 
-        socket.on('flipError', (msg) => document.getElementById('message').innerText = msg);
+        socket.on('flipError', (msg) => {
+            document.getElementById('info').innerText = msg;
+        });
 
-        function renderGameBoard(cards, currentTurn) {
+        socket.on('chatHistory', (messages) => {
+            const chatBox = document.getElementById('chat');
+            chatBox.innerHTML = '';
+            messages.forEach(m => appendChat(m));
+        });
+
+        socket.on('newChatMessage', (msg) => appendChat(msg));
+
+        function appendChat({ name, message, time }) {
+            const chatBox = document.getElementById('chat');
+            chatBox.innerHTML += `<div><strong>${time} ${name}:</strong> ${message}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function renderBoard(cards, currentTurn) {
             const board = document.getElementById('game-board');
             board.innerHTML = '';
             cards.forEach(card => {
-                const wrapper = document.createElement('div');
-                wrapper.className = `card w-16 h-16 sm:w-28 sm:h-28 ${card.isFlipped || card.isMatched ? 'flipped' : ''}`;
-                const inner = document.createElement('div');
-                inner.className = 'card-inner';
-
-                const front = document.createElement('div');
-                front.className = 'card-front bg-gray-300';
-
-                const back = document.createElement('div');
-                back.className = 'card-back';
-                const img = document.createElement('img');
-                img.src = card.image;
-                img.className = 'w-full h-full object-cover rounded-lg';
-                back.appendChild(img);
-
-                inner.appendChild(front);
-                inner.appendChild(back);
-                wrapper.appendChild(inner);
-
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.style.background = card.isFlipped || card.isMatched ? `url(${card.image}) center/cover` : '#ccc';
                 if (currentTurn === playerId && !card.isFlipped && !card.isMatched) {
-                    wrapper.addEventListener('click', () => socket.emit('flipCard', { roomId: currentRoomId, cardId: card.id }));
+                    div.onclick = () => socket.emit('flipCard', { roomId: currentRoomId, cardId: card.id });
                 }
-                board.appendChild(wrapper);
+                board.appendChild(div);
             });
         }
 
-        function updatePlayers(players, currentTurn = null) {
-            document.getElementById('players').innerHTML = players.map(p =>
-                `<span class="${p.id === currentTurn ? 'text-green-600 font-bold' : ''}">${p.name}</span>`
-            ).join(' vs ');
-            document.getElementById('score-board').innerHTML = players.map(p =>
-                `<span class="${p.id === playerId ? 'text-blue-600' : 'text-gray-600'}">${p.name}: ${p.score}</span>`
-            ).join(' | ');
-        }
-
-        function startTimer(seconds) {
-            clearInterval(turnTimer);
-            const timerEl = document.getElementById('timer');
-            timerEl.classList.remove('hidden');
-            let timeLeft = seconds;
-            timerEl.innerText = `⏳ Zugzeit: ${timeLeft}s`;
-            turnTimer = setInterval(() => {
-                timeLeft--;
-                timerEl.innerText = `⏳ Zugzeit: ${timeLeft}s`;
-                if (timeLeft <= 0) clearInterval(turnTimer);
-            }, 1000);
+        function updateScore(players) {
+            document.getElementById('score').innerText = players.map(p => `${p.name}: ${p.score}`).join(' | ');
         }
     </script>
 </body>
