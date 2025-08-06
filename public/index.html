@@ -16,29 +16,12 @@
       --text: #f4f4f4;
       --primary: #3498db;
     }
-    body {
-      margin: 0;
-      font-family: 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    .container {
-      background: var(--bg);
-      border-radius: 16px;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-      padding: 20px;
-      max-width: 420px;
-      width: 95%;
-      display: flex;
-      flex-direction: column;
-    }
+    body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; height: 100vh; }
+    .container { background: var(--bg); border-radius: 16px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); padding: 20px; max-width: 420px; width: 95%; display: flex; flex-direction: column; }
     h2 { text-align: center; color: var(--primary); margin-bottom: 15px; }
+    .hidden { display: none !important; }
     .inputs { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
-    .inputs input, .inputs button { padding: 10px; font-size: 16px; border-radius: 8px; }
+    .inputs select, .inputs input, .inputs button { padding: 10px; font-size: 16px; border-radius: 8px; }
     .inputs button { border: none; cursor: pointer; }
     .btn-create { background: #3498db; color: white; }
     .btn-join { background: #2ecc71; color: white; }
@@ -58,8 +41,11 @@
     #emoji-bar button { font-size: 18px; margin: 2px; cursor: pointer; }
     #darkModeToggle { position: absolute; top: 10px; right: 10px; cursor: pointer; }
     #winner { text-align: center; font-size: 1.5rem; color: var(--primary); margin-top: 10px; }
+    #newGameBtn { display:none; margin: 10px auto; padding:10px; font-size:16px; background:#2ecc71; color:white; border:none; border-radius:8px; cursor:pointer; }
     canvas#confetti { position: fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:999; }
-    @media (max-width: 480px) { #game-board { gap: 8px; } }
+    #lobby { max-height: 300px; overflow-y: auto; margin-top: 10px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: #fafafa; }
+    .room { display: flex; justify-content: space-between; align-items: center; padding: 5px; border-bottom: 1px solid #eee; }
+    .room button { background: #2ecc71; border: none; color: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
   </style>
 </head>
 <body data-theme="light">
@@ -67,32 +53,54 @@
   <div id="darkModeToggle">🌙</div>
   <div class="container">
     <h2>Memory Spiel Deluxe</h2>
-    <div class="inputs" id="buttons">
-      <input type="text" id="roomId" placeholder="Raum-ID">
-      <input type="text" id="playerName" placeholder="Dein Name">
-      <button class="btn-create" onclick="createRoom()">Raum erstellen</button>
-      <button class="btn-join" onclick="joinRoom()">Raum beitreten</button>
+
+    <!-- Lobby -->
+    <div id="lobby-section">
+      <div id="lobby"><p>Lade offene Räume...</p></div>
+      <div class="inputs">
+        <input type="text" id="playerNameLobby" placeholder="Dein Name">
+        <input type="text" id="roomIdLobby" placeholder="Neue Raum-ID">
+        <select id="turnTimeLobby">
+          <option value="10">Zugzeit: 10s</option>
+          <option value="15">Zugzeit: 15s</option>
+          <option value="20">Zugzeit: 20s</option>
+          <option value="30">Zugzeit: 30s</option>
+        </select>
+        <button class="btn-create" onclick="createRoom()">Neuen Raum erstellen</button>
+      </div>
     </div>
-    <div id="info"></div>
-    <div id="timer"></div>
-    <div id="score"></div>
-    <div id="game-board"></div>
-    <div id="winner"></div>
-    <div id="chat"></div>
-    <div id="chat-input">
-      <input type="text" id="chatMessage" placeholder="Nachricht...">
-      <button onclick="sendMessage()">Senden</button>
-    </div>
-    <div id="emoji-bar">
-      <button onclick="sendEmoji('😂')">😂</button>
-      <button onclick="sendEmoji('👏')">👏</button>
-      <button onclick="sendEmoji('🔥')">🔥</button>
-      <button onclick="sendEmoji('👍')">👍</button>
+
+    <!-- Game UI -->
+    <div id="game-section" class="hidden">
+      <div id="info"></div>
+      <div id="timer"></div>
+      <div id="score"></div>
+      <div id="game-board"></div>
+      <div id="winner"></div>
+      <button id="newGameBtn" onclick="restartGame()">Neues Spiel starten</button>
+      <div id="chat"></div>
+      <div id="chat-input">
+        <input type="text" id="chatMessage" placeholder="Nachricht...">
+        <button onclick="sendMessage()">Senden</button>
+      </div>
+      <div id="emoji-bar">
+        <button onclick="sendEmoji('😂')">😂</button>
+        <button onclick="sendEmoji('👏')">👏</button>
+        <button onclick="sendEmoji('🔥')">🔥</button>
+        <button onclick="sendEmoji('👍')">👍</button>
+        <button onclick="sendEmoji('🎉')">🎉</button>
+        <button onclick="sendEmoji('😍')">😍</button>
+        <button onclick="sendEmoji('🤯')">🤯</button>
+        <button onclick="sendEmoji('🙌')">🙌</button>
+        <button onclick="sendEmoji('🥳')">🥳</button>
+        <button onclick="sendEmoji('💯')">💯</button>
+      </div>
     </div>
   </div>
+
   <script>
     const socket = io();
-    let playerId, currentRoomId = null;
+    let playerId, currentRoomId = null, playerName = "";
 
     const confettiCanvas = document.getElementById('confetti');
     const ctx = confettiCanvas.getContext('2d');
@@ -100,68 +108,58 @@
     confettiCanvas.height = window.innerHeight;
     let confettiParticles = [];
 
-    socket.on('connect', () => { playerId = socket.id; });
+    socket.on('connect', () => { playerId = socket.id; socket.emit('getRooms'); });
+
+    // 🌐 Lobby-Updates
+    socket.on('roomList', (rooms) => {
+      const lobbyDiv = document.getElementById('lobby');
+      lobbyDiv.innerHTML = rooms.length === 0 ? "<p>Keine offenen Räume.</p>" : "";
+      rooms.forEach(room => {
+        const div = document.createElement('div');
+        div.className = 'room';
+        div.innerHTML = `<span><strong>${room.roomId}</strong> (${room.players.join(', ') || 'Wartend'}) - ${room.turnTime}s</span>
+                         <button onclick="joinRoom('${room.roomId}')">Beitreten</button>`;
+        lobbyDiv.appendChild(div);
+      });
+    });
 
     function createRoom() {
-      const roomId = document.getElementById('roomId').value.trim();
-      const playerName = document.getElementById('playerName').value.trim();
-      if (roomId && playerName) socket.emit('createRoom', { roomId, playerName });
-    }
-
-    function joinRoom() {
-      const roomId = document.getElementById('roomId').value.trim();
-      const playerName = document.getElementById('playerName').value.trim();
-      if (roomId && playerName) socket.emit('joinRoom', { roomId, playerName });
-    }
-
-    function sendMessage() {
-      const msg = document.getElementById('chatMessage').value.trim();
-      if (msg && currentRoomId) {
-        socket.emit('sendChatMessage', { roomId: currentRoomId, name: document.getElementById('playerName').value.trim(), message: msg });
-        document.getElementById('chatMessage').value = '';
+      playerName = document.getElementById('playerNameLobby').value.trim();
+      const roomId = document.getElementById('roomIdLobby').value.trim();
+      const turnTime = document.getElementById('turnTimeLobby').value;
+      if (playerName && roomId) {
+        socket.emit('createRoom', { roomId, playerName, turnTime });
       }
     }
 
-    function sendEmoji(emoji) {
-      socket.emit('sendChatMessage', { roomId: currentRoomId, name: document.getElementById('playerName').value.trim(), message: emoji });
+    function joinRoom(roomId) {
+      playerName = document.getElementById('playerNameLobby').value.trim() || prompt("Bitte gib deinen Namen ein:");
+      if (playerName) socket.emit('joinRoom', { roomId, playerName });
     }
 
-    document.getElementById('chatMessage').addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
-
-    document.getElementById('darkModeToggle').addEventListener('click', () => {
-      const body = document.body;
-      const current = body.getAttribute('data-theme');
-      const newTheme = current === 'light' ? 'dark' : 'light';
-      body.setAttribute('data-theme', newTheme);
-      document.getElementById('darkModeToggle').textContent = newTheme === 'light' ? '🌙' : '☀️';
-      localStorage.setItem('theme', newTheme);
+    // 🎮 Game Events
+    socket.on('roomCreated', (roomId) => { enterGame(roomId); });
+    socket.on('playerJoined', players => { document.getElementById('info').innerText = 'Spieler: ' + players.map(p => p.name).join(', '); });
+    socket.on('gameStart', ({ cards, currentTurn, players, roomId }) => {
+      enterGame(roomId);
+      renderBoard(cards, currentTurn);
+      updateScore(players);
     });
-
-    window.addEventListener('load', () => {
-      const savedTheme = localStorage.getItem('theme') || 'light';
-      document.body.setAttribute('data-theme', savedTheme);
-      document.getElementById('darkModeToggle').textContent = savedTheme === 'light' ? '🌙' : '☀️';
-    });
-
-    socket.on('roomCreated', roomId => { currentRoomId = roomId; document.getElementById('info').innerText = `Raum erstellt: ${roomId}`; });
-    socket.on('playerJoined', players => { document.getElementById('info').innerText = 'Spieler: ' + players.map(p => p.name).join(', '); if (!currentRoomId) currentRoomId = document.getElementById('roomId').value.trim(); });
-    socket.on('gameStart', ({ cards, currentTurn, players, roomId }) => { currentRoomId = roomId; document.getElementById('buttons').style.display = 'none'; renderBoard(cards, currentTurn); updateScore(players); });
     socket.on('timerUpdate', (t) => document.getElementById('timer').innerText = `⏱ Zugzeit: ${t}s`);
     socket.on('gameUpdate', ({ cards, currentTurn, players }) => { renderBoard(cards, currentTurn); updateScore(players); });
-    socket.on('gameEnd', ({ winner, scores, stats, duration }) => {
-      document.getElementById('winner').innerHTML = `🏆 ${winner} hat gewonnen!<br><small>Dauer: ${duration}s</small>`;
-      showStats(stats);
+    socket.on('gameEnd', ({ winner, scores }) => {
+      document.getElementById('winner').innerHTML = `🏆 ${winner} hat gewonnen!`;
       launchConfetti();
+      document.getElementById('newGameBtn').style.display = 'block';
     });
-    socket.on('flipError', msg => document.getElementById('info').innerText = msg);
-    socket.on('chatHistory', msgs => { const chat = document.getElementById('chat'); chat.innerHTML = ''; msgs.forEach(m => appendChat(m)); });
-    socket.on('newChatMessage', m => appendChat(m));
 
-    function appendChat({ name, message, time }) {
-      const chat = document.getElementById('chat');
-      chat.innerHTML += `<div><strong>${time} ${name}:</strong> ${message}</div>`;
-      chat.scrollTop = chat.scrollHeight;
+    function enterGame(roomId) {
+      currentRoomId = roomId;
+      document.getElementById('lobby-section').classList.add('hidden');
+      document.getElementById('game-section').classList.remove('hidden');
     }
+
+    function restartGame() { socket.emit('restartGame', currentRoomId); document.getElementById('winner').innerHTML = ''; document.getElementById('newGameBtn').style.display = 'none'; }
 
     function renderBoard(cards, currentTurn) {
       const board = document.getElementById('game-board');
@@ -171,19 +169,15 @@
         wrapper.className = `card ${card.isFlipped || card.isMatched ? 'flipped' : ''}`;
         const inner = document.createElement('div');
         inner.className = 'card-inner';
-
         const front = document.createElement('div');
         front.className = 'card-front';
         front.textContent = '?';
-
         const back = document.createElement('div');
         back.className = 'card-back';
         back.style.backgroundImage = `url(${card.image})`;
-
         inner.appendChild(front);
         inner.appendChild(back);
         wrapper.appendChild(inner);
-
         if (currentTurn === playerId && !card.isFlipped && !card.isMatched) {
           wrapper.addEventListener('click', () => socket.emit('flipCard', { roomId: currentRoomId, cardId: card.id }));
         }
@@ -191,20 +185,9 @@
       });
     }
 
-    function updateScore(players) {
-      document.getElementById('score').innerText = players.map(p => `${p.name}: ${p.score}`).join(' | ');
-    }
+    function updateScore(players) { document.getElementById('score').innerText = players.map(p => `${p.name}: ${p.score}`).join(' | '); }
 
-    function showStats(stats) {
-      const statLines = stats.map(s => `${s.name}: ${s.moves} Züge | ${s.hits} Treffer | Genauigkeit: ${s.accuracy}`).join('\n');
-      const div = document.createElement('div');
-      div.style.textAlign = 'center';
-      div.style.marginTop = '10px';
-      div.innerHTML = `<pre>${statLines}</pre>`;
-      document.querySelector('.container').appendChild(div);
-    }
-
-    // 🎉 Konfetti-Animation
+    // 🎉 Confetti
     function launchConfetti() {
       confettiParticles = Array.from({ length: 150 }, () => ({
         x: Math.random() * confettiCanvas.width,
@@ -215,7 +198,6 @@
       }));
       requestAnimationFrame(drawConfetti);
     }
-
     function drawConfetti() {
       ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
       confettiParticles.forEach(p => {
@@ -228,6 +210,41 @@
       });
       requestAnimationFrame(drawConfetti);
     }
+
+    // Chat & Emojis
+    function sendMessage() {
+      const msg = document.getElementById('chatMessage').value.trim();
+      if (msg && currentRoomId) {
+        socket.emit('sendChatMessage', { roomId: currentRoomId, name: playerName, message: msg });
+        document.getElementById('chatMessage').value = '';
+      }
+    }
+    function sendEmoji(emoji) { sendMessageDirect(emoji); }
+    function sendMessageDirect(msg) {
+      if (msg && currentRoomId) socket.emit('sendChatMessage', { roomId: currentRoomId, name: playerName, message: msg });
+    }
+    socket.on('chatHistory', msgs => { const chat = document.getElementById('chat'); chat.innerHTML = ''; msgs.forEach(m => appendChat(m)); });
+    socket.on('newChatMessage', m => appendChat(m));
+    function appendChat({ name, message, time }) {
+      const chat = document.getElementById('chat');
+      chat.innerHTML += `<div><strong>${time} ${name}:</strong> ${message}</div>`;
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    // Dark Mode
+    document.getElementById('darkModeToggle').addEventListener('click', () => {
+      const body = document.body;
+      const current = body.getAttribute('data-theme');
+      const newTheme = current === 'light' ? 'dark' : 'light';
+      body.setAttribute('data-theme', newTheme);
+      document.getElementById('darkModeToggle').textContent = newTheme === 'light' ? '🌙' : '☀️';
+      localStorage.setItem('theme', newTheme);
+    });
+    window.addEventListener('load', () => {
+      const savedTheme = localStorage.getItem('theme') || 'light';
+      document.body.setAttribute('data-theme', savedTheme);
+      document.getElementById('darkModeToggle').textContent = savedTheme === 'light' ? '🌙' : '☀️';
+    });
   </script>
 </body>
 </html>
