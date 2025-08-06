@@ -94,12 +94,13 @@ io.on('connection', (socket) => {
                 io.to(roomId).emit('gameUpdate', { cards: room.cards, currentTurn: room.currentTurn, players: room.players });
             } else {
                 setTimeout(() => {
-                    flippedCards.forEach(c => c.isFlipped = false);
-                    const next = room.players.find(p => p.id !== socket.id);
-                    room.currentTurn = next.id;
-                    room.locked = false;
-                    io.to(roomId).emit('gameUpdate', { cards: room.cards, currentTurn: room.currentTurn, players: room.players });
-                }, 1000);
+    flippedCards.forEach(c => c.isFlipped = false);
+    const next = room.players.find(p => p.id !== socket.id);
+    room.currentTurn = next.id;
+    room.locked = false;
+    io.to(roomId).emit('gameUpdate', { cards: room.cards, currentTurn: room.currentTurn, players: room.players });
+}, 1500); // ⬅︎ jetzt 1,5 Sekunden
+
             }
         }
 
